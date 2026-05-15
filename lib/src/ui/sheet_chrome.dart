@@ -83,21 +83,37 @@ class _DoneButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = theme;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.4,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: t.spacing.md, vertical: t.spacing.xs),
-          decoration: BoxDecoration(
-            color: t.colors.primary,
-            borderRadius: BorderRadius.circular(t.radii.button),
-            boxShadow: enabled ? t.shadows.button : null,
-          ),
-          child: Text(
-            label,
-            style: t.typography.button.copyWith(color: t.colors.onPrimary),
+    // Two distinct visual states (not a washed-out opacity).
+    //   - enabled: solid primary fill + onPrimary label + shadow
+    //   - disabled: transparent fill + primary outline + primary
+    //               label at 40% — reads as "tap a thumbnail
+    //               first", not "the button is broken"
+    final disabledTint = t.colors.primary.withValues(alpha: 0.4);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: enabled ? t.colors.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(t.radii.button),
+        border: enabled
+            ? null
+            : Border.all(color: disabledTint, width: 1.2),
+        boxShadow: enabled ? t.shadows.button : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(t.radii.button),
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: t.spacing.md, vertical: t.spacing.xs),
+            child: Text(
+              label,
+              style: t.typography.button.copyWith(
+                color: enabled ? t.colors.onPrimary : disabledTint,
+              ),
+            ),
           ),
         ),
       ),

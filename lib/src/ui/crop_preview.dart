@@ -37,22 +37,32 @@ class CropPreview extends StatelessWidget {
         (featured == null
             ? 1.0
             : featured.width / (featured.height == 0 ? 1 : featured.height));
+
+    // Cap preview to 38% of viewport so portrait screenshots (9:19.5)
+    // don't push the asset grid off-screen. AspectRatio inside the
+    // ConstrainedBox preserves the asset's shape until the cap kicks
+    // in, then BoxFit.cover crops to fit.
+    final media = MediaQuery.of(context);
+    final maxHeight = media.size.height * 0.38;
     return Column(
       children: [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
-          child: AspectRatio(
-            aspectRatio: ratio,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(t.radii.cropFrame),
-              child: featured == null
-                  ? _placeholderTile(t)
-                  : _AssetThumb(
-                      asset: featured,
-                      placeholder: t.colors.thumbnailPlaceholder,
-                      width: 800,
-                      height: 800,
-                    ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: AspectRatio(
+              aspectRatio: ratio,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(t.radii.cropFrame),
+                child: featured == null
+                    ? _placeholderTile(t)
+                    : _AssetThumb(
+                        asset: featured,
+                        placeholder: t.colors.thumbnailPlaceholder,
+                        width: 800,
+                        height: 800,
+                      ),
+              ),
             ),
           ),
         ),
