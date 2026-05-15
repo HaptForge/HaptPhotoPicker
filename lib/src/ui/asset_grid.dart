@@ -138,13 +138,16 @@ class _Thumbnail extends StatelessWidget {
                     decoration: BoxDecoration(color: t.colors.disabledOverlay),
                   ),
                 ),
-              // Selection badge — top-right
+              // Selection badge — top-right. Number in multi-pick
+              // mode, plain check in single-pick mode (a "1" when
+              // the user is by definition picking one is noise).
               Positioned(
                 top: 6,
                 right: 6,
                 child: _Badge(
                   theme: t,
                   index: selectedIndex,
+                  showNumber: controller.config.maxSelection > 1,
                 ),
               ),
               // Duration pill — bottom-right for videos
@@ -163,12 +166,21 @@ class _Thumbnail extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({required this.theme, this.index});
+  const _Badge({
+    required this.theme,
+    required this.showNumber,
+    this.index,
+  });
   final HaptPickerTheme theme;
 
   /// Null = not selected (renders an outline circle).
   /// 1-based when selected.
   final int? index;
+
+  /// Multi-pick: show the 1-based index digit. Single-pick: show
+  /// a check icon instead — a number when there's only one slot
+  /// reads as noise.
+  final bool showNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -189,14 +201,17 @@ class _Badge extends StatelessWidget {
         boxShadow: selected ? t.shadows.badge : null,
       ),
       alignment: Alignment.center,
-      child: selected
-          ? Text(
-              '$index',
-              style: t.typography.badge.copyWith(
-                color: t.colors.selectionBadgeText,
-              ),
-            )
-          : null,
+      child: !selected
+          ? null
+          : (showNumber
+              ? Text(
+                  '$index',
+                  style: t.typography.badge.copyWith(
+                    color: t.colors.selectionBadgeText,
+                  ),
+                )
+              : Icon(Icons.check_rounded,
+                  color: t.colors.selectionBadgeText, size: 16)),
     );
   }
 }

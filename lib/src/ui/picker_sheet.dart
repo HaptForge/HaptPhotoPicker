@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart' as pm;
 
@@ -8,6 +10,7 @@ import '../config/picker_theme.dart';
 import '../controller/picker_controller.dart';
 import '../data/album.dart';
 import '../pipeline/asset_transform.dart';
+import '../pipeline/crop_engine.dart';
 import '../util/haptics.dart';
 import 'asset_grid.dart';
 import 'crop_preview.dart';
@@ -118,12 +121,17 @@ class _HaptPickerSheetState extends State<HaptPickerSheet> {
     navigator.pop(results);
   }
 
-  /// Run every transform in order, threading bytes from one step's
-  /// output into the next step's input. Single-pass; transforms can
-  /// no-op via `HaptTransformResult.passthrough`.
+  /// Apply the per-asset crop/rotate/zoom state first, then thread
+  /// the cropped bytes through any user-registered transforms in
+  /// order. Single-pass; transforms can no-op via
+  /// `HaptTransformResult.passthrough`. The crop engine runs even
+  /// when no transforms are registered, so consumers always get
+  /// bytes that reflect what the user saw in the preview.
   Future<List<HaptPickerResult>> _runPipeline() async {
     final locale = Localizations.maybeLocaleOf(context)?.toLanguageTag() ?? 'en';
     final selection = _controller.selection;
+    final frameRatio = _controller.aspectRatio;
+    const crop = HaptCropEngine();
     final out = <HaptPickerResult>[];
     for (var i = 0; i < selection.length; i++) {
       final asset = selection[i];
@@ -132,7 +140,11 @@ class _HaptPickerSheetState extends State<HaptPickerSheet> {
         totalSelected: selection.length,
         locale: locale,
       );
-      var bytes = null as dynamic;
+      Uint8List? bytes = await crop.apply(
+        asset: asset,
+        state: _controller.cropFor(asset),
+        frameRatio: frameRatio,
+      );
       for (final t in widget.pipeline) {
         final r = await t.run(
           asset: asset,

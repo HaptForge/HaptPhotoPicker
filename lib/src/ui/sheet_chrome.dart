@@ -29,39 +29,103 @@ class PickerChrome extends StatelessWidget {
     final t = theme;
     final canFinish = controller.canFinish;
     final count = controller.selection.length;
+    final isMulti = controller.config.maxSelection > 1;
+
+    // Done button label: in single-pick mode the count adds nothing
+    // — the user is picking one item, of course the count is 1.
+    // Reserving the digit shows "Done (1)" which feels noisy. Only
+    // multi-pick mode surfaces the count.
+    final doneLabel = !isMulti || count == 0
+        ? strings.doneLabelEmpty
+        : strings.doneLabelWithCount(count);
+
+    // Fixed-width side slots (Cancel, Done) so the center
+    // AlbumDropdown stays put as the count changes. Without this,
+    // every selection tap reflows the entire chrome row. 92 px
+    // covers "Done (4)" in every locale at the chosen button font.
+    const sideSlot = 92.0;
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        t.spacing.md, t.spacing.sm, t.spacing.md, t.spacing.xs),
+          t.spacing.md, t.spacing.sm, t.spacing.md, t.spacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Cancel
-          TextButton(
-            onPressed: onCancel,
-            style: TextButton.styleFrom(
-              foregroundColor: t.colors.textSecondary,
-              padding: EdgeInsets.symmetric(
-                horizontal: t.spacing.xs, vertical: t.spacing.xxs),
+          // Left slot — Cancel
+          SizedBox(
+            width: sideSlot,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _ChromeTextButton(
+                theme: t,
+                label: strings.cancelLabel,
+                onTap: onCancel,
+              ),
             ),
-            child: Text(strings.cancelLabel, style: t.typography.label),
           ),
-          const Spacer(),
-          AlbumDropdown(
-            theme: t,
-            strings: strings,
-            controller: controller,
+          // Center — album dropdown gets the rest of the row, with
+          // overflow ellipsis on long album names.
+          Expanded(
+            child: Center(
+              child: AlbumDropdown(
+                theme: t,
+                strings: strings,
+                controller: controller,
+              ),
+            ),
           ),
-          const Spacer(),
-          // Done
-          _DoneButton(
-            theme: t,
-            label: count == 0
-                ? strings.doneLabelEmpty
-                : strings.doneLabelWithCount(count),
-            enabled: canFinish && count > 0,
-            onTap: onDone,
+          // Right slot — Done
+          SizedBox(
+            width: sideSlot,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _DoneButton(
+                theme: t,
+                label: doneLabel,
+                enabled: canFinish && count > 0,
+                onTap: onDone,
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small chrome-side text button (Cancel). Pulled out so we can use
+/// the `button` typography slot (15px) instead of the `label` slot
+/// (12px) — the previous version felt cramped + ungrokkable next to
+/// the album dropdown title.
+class _ChromeTextButton extends StatelessWidget {
+  const _ChromeTextButton({
+    required this.theme,
+    required this.label,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(t.radii.button),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+              horizontal: t.spacing.xs, vertical: t.spacing.xs),
+          child: Text(
+            label,
+            style: t.typography.button.copyWith(
+              color: t.colors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
       ),
     );
   }

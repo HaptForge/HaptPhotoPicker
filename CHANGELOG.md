@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.2.0 — 2026-05-15
+
+Feature pass — the picker now actually edits. v0.1.x exposed crop
+chrome but the bytes returned were untouched; users tapped Done
+expecting the cropped output they'd just framed and got the raw
+asset. v0.2.0 closes that loop end-to-end, plus the three top-bar
+papercuts from production feedback.
+
+### Added
+
+- **Interactive crop preview** — pinch-to-zoom (1.0×–4.0×) + pan
+  via `InteractiveViewer`, 90° clockwise rotation button overlaid
+  top-right, rule-of-thirds grid fades in during interaction. Each
+  selected asset retains its own pan / zoom / rotation state keyed
+  by asset id, so the user can flip among selections and resume
+  where they left off on each.
+- **Aspect-ratio enforcement** — the chosen `HaptAspectRatio`
+  (original / square / portrait / landscape / custom) is now a
+  hard frame inside the preview, and the same ratio drives the
+  exported crop rect at Done. Changing the ratio resets the
+  featured asset's transform — pan/zoom relative to the old frame
+  shape wouldn't translate cleanly to the new one.
+- **`HaptCropEngine`** — pure-Dart crop + rotation pipeline (uses
+  the `image` package, no native bridges) that runs as the first
+  step of the Done-tap pipeline. Returns JPEG-encoded `Uint8List`
+  reflecting exactly what the user saw in the preview. Composes
+  with any registered `HaptAssetTransform`s — crop runs first, then
+  watermark / exif-strip / etc. consume the cropped bytes.
+- **Per-asset crop state** (`HaptCropState`) — snapshotted into
+  `HaptPickerResult` so consumers who don't want the `image`-package
+  path can reconstruct the crop themselves from scale + translation
+  + rotation quarters.
+
+### Changed
+
+- **Top bar layout** — fixed 92px slots on either side of the
+  centered title means the layout no longer reflows as the
+  selection count changes. Button typography bumped from 13px
+  body to 15px button — the prior size read as a placeholder.
+- **Single-pick selection badge** — when `maxSelection == 1`,
+  badges render a check icon instead of the digit `1`. A number
+  in a one-slot picker reads as noise.
+- **Done label** — single-pick mode no longer surfaces the count
+  in the label. "Done" on its own is clearer when there's only
+  one slot.
+
+### Dependencies
+
+- Added `image: ^4.2.0` for the pure-Dart crop engine.
+
 ## 0.1.1 — 2026-05-15
 
 First production-test polish pass — three visual bugs surfaced

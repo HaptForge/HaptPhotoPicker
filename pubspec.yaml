@@ -1,6 +1,6 @@
 name: hapt_photo_picker
 description: An Instagram-grade photo picker for Flutter with full token theming, multi-language strings, choreographed haptics, and a pluggable post-processing pipeline.
-version: 0.1.1
+version: 0.2.0
 homepage: https://github.com/HaptForge/HaptPhotoPicker
 repository: https://github.com/HaptForge/HaptPhotoPicker
 issue_tracker: https://github.com/HaptForge/HaptPhotoPicker/issues
@@ -23,6 +23,12 @@ dependencies:
   # Underlying media-library access. We wrap its types so consumers
   # never have to import `photo_manager` directly.
   photo_manager: ^3.6.0
+  # Pure-Dart image processing. Used by `HaptCropEngine` to apply
+  # crop + rotation to the asset bytes on Done — slower than native
+  # equivalents but works identically on every platform we ship to
+  # (iOS, Android, web). Cropping a 4-MP photo is ~120ms on a
+  # mid-tier device; acceptable for the Done-tap interaction.
+  image: ^4.2.0
 
 dev_dependencies:
   flutter_test:
