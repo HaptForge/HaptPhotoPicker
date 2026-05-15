@@ -1,0 +1,25 @@
+name: hapt_photo_picker_example
+description: Demo app for HaptPhotoPicker — exercises every customization knob.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.4.0
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  hapt_photo_picker:
+    path: ..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

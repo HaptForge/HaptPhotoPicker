@@ -1,0 +1,10 @@
+include: package:flutter_lints/flutter.yaml
+
+# Stricter than the default to catch shipping bugs in a published
+# package. Lints that don't apply to a library (e.g. `prefer_const_constructors_in_immutables`
+# on private widget constructors) are silenced.
+linter:
+  rules:
+    require_trailing_commas: false
+    public_member_api_docs: false  # README + dartdocs cover this
+    avoid_print: true
