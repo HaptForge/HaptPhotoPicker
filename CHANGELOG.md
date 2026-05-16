@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.5.0 — 2026-05-17
+
+Two production-test bugs / gaps.
+
+### Fixed
+
+- **Single-pick mode now supports tap-to-replace.** Before:
+  selecting a different photo while one was already picked
+  silently failed (the controller treated it as "max reached").
+  User had to deselect the current pick before tapping the new
+  one — two taps for what should be one. Now: in single-pick mode
+  (`maxSelection == 1`) tapping a different thumbnail clears the
+  current pick + selects the new one in a single move. Multi-pick
+  semantics are unchanged — that path correctly requires the user
+  to explicitly deselect, because the selection ORDER matters
+  there (badges render 1/2/3 of N).
+
+### Added
+
+- **Editor tool tabs.** v0.3/0.4 stacked the aspect-ratio chips
+  and the filter strip below the crop canvas at the same time —
+  the chips disappeared on small phones once filters shipped, and
+  the surface read as a half-finished picker rather than a real
+  photo editor. v0.5 introduces an explicit two-tab strip
+  (**Crop** | **Filter**) below the crop canvas; tapping a tab
+  reveals only that tool's panel. Crop shows ratio chips, Filter
+  shows the live-preview strip. Both panels reuse the existing
+  widgets — no behaviour change beyond visibility / discoverability.
+- Two new abstract strings on `HaptPickerStrings` — `editorToolCrop`
+  and `editorToolFilter`. English defaults shipped; consumer apps
+  override via their existing `HaptPickerStrings` subclass.
+
+### Layout fallback
+
+- Tabs render only when BOTH ratios AND filters have more than
+  one option each. If only ratios are configured, the chips show
+  directly (no tabs). If only filters, the strip shows directly.
+  If neither, the surface is empty — preserves the minimal feel
+  for picker configurations that don't enable editing.
+
+### Known gaps (planned for 0.6)
+
+- Adjust tab (brightness / contrast / saturation / exposure sliders)
+- Straighten slider (rotate by 1° increments)
+- Per-filter intensity slider
+- Flip horizontal / vertical buttons in the Crop tab
+- Burst-aware selection grouping
+- Live filter preview in the asset grid
+
 ## 0.4.1 — 2026-05-16
 
 Smoothness pass on the crop preview + filter strip — no flicker on

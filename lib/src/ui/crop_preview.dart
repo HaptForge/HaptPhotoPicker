@@ -44,10 +44,19 @@ class CropPreview extends StatefulWidget {
   State<CropPreview> createState() => _CropPreviewState();
 }
 
+/// Which editor tool panel is currently visible. The picker shows
+/// an explicit tab strip below the crop canvas so the user can
+/// switch between cropping (ratio + rotate) and applying a filter
+/// — the prior version stacked both panels at once, which buried
+/// the aspect-ratio chips on small phones and made the picker
+/// read as half a feature.
+enum _EditorTool { crop, filter }
+
 class _CropPreviewState extends State<CropPreview> {
   final TransformationController _transform = TransformationController();
   bool _interacting = false;
   String? _wiredAssetId;
+  _EditorTool _tool = _EditorTool.crop;
 
   @override
   void initState() {
@@ -166,28 +175,188 @@ class _CropPreviewState extends State<CropPreview> {
           ),
         ),
         SizedBox(height: t.spacing.xs),
-        if (widget.controller.config.aspectRatios.length > 1)
-          _AspectRatioChips(
+        // Tool surface. Three layout cases:
+        //
+        //   - Both tools active (more than 1 ratio AND more than 1
+        //     filter) → render the tool tab strip, show whichever
+        //     panel matches the active tab.
+        //   - Only ratios available → show the chips, no tabs.
+        //   - Only filters available → show the strip, no tabs.
+        //   - Neither → render nothing (single-ratio + identity-only
+        //     consumers get a clean modal with just thumbnails).
+        _buildToolSurface(t, featured, activeFilter, filters),
+      ],
+    );
+  }
+
+  Widget _buildToolSurface(
+    HaptPickerTheme t,
+    HaptAsset? featured,
+    HaptFilter activeFilter,
+    List<HaptFilter> filters,
+  ) {
+    final hasRatios = widget.controller.config.aspectRatios.length > 1;
+    final hasFilters = filters.length > 1 && featured != null;
+    if (!hasRatios && !hasFilters) {
+      return const SizedBox.shrink();
+    }
+    if (hasRatios && !hasFilters) {
+      return _AspectRatioChips(
+        theme: t,
+        strings: widget.strings,
+        controller: widget.controller,
+      );
+    }
+    if (!hasRatios && hasFilters) {
+      return _FilterStrip(
+        theme: t,
+        strings: widget.strings,
+        controller: widget.controller,
+        asset: featured,
+        active: activeFilter,
+        filters: filters,
+      );
+    }
+    // Both — show the explicit tool tabs, then the active panel
+    // below. This is what the user actually sees in a typical
+    // "photo editor" picker.
+    final featuredAsset = featured!; // hasFilters guarantees non-null
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _EditorToolTabs(
+          theme: t,
+          strings: widget.strings,
+          active: _tool,
+          onTap: (tool) => setState(() => _tool = tool),
+        ),
+        SizedBox(height: t.spacing.xs),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: _tool == _EditorTool.crop
+              ? KeyedSubtree(
+                  key: const ValueKey('crop-panel'),
+                  child: _AspectRatioChips(
+                    theme: t,
+                    strings: widget.strings,
+                    controller: widget.controller,
+                  ),
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('filter-panel'),
+                  child: _FilterStrip(
+                    theme: t,
+                    strings: widget.strings,
+                    controller: widget.controller,
+                    asset: featuredAsset,
+                    active: activeFilter,
+                    filters: filters,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Two-tab strip — Crop | Filter — sitting below the crop canvas.
+/// Each tab is icon + label so the tool surface is recognisable
+/// at a glance.
+class _EditorToolTabs extends StatelessWidget {
+  const _EditorToolTabs({
+    required this.theme,
+    required this.strings,
+    required this.active,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final HaptPickerStrings strings;
+  final _EditorTool active;
+  final ValueChanged<_EditorTool> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: t.spacing.md),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: t.colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(t.radii.button),
+      ),
+      child: Row(
+        children: [
+          _ToolTab(
             theme: t,
-            strings: widget.strings,
-            controller: widget.controller,
+            icon: Icons.crop_rounded,
+            label: strings.editorToolCrop,
+            active: active == _EditorTool.crop,
+            onTap: () => onTap(_EditorTool.crop),
           ),
-        // Filter strip — horizontal scroll of live-preview chips.
-        // Hidden when the config only ships the identity filter
-        // (consumers who want no filter affordance pass
-        // `filters: const [HaptFilter.original]`).
-        if (filters.length > 1 && featured != null) ...[
-          SizedBox(height: t.spacing.xs),
-          _FilterStrip(
+          _ToolTab(
             theme: t,
-            strings: widget.strings,
-            controller: widget.controller,
-            asset: featured,
-            active: activeFilter,
-            filters: filters,
+            icon: Icons.auto_awesome_rounded,
+            label: strings.editorToolFilter,
+            active: active == _EditorTool.filter,
+            onTap: () => onTap(_EditorTool.filter),
           ),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+class _ToolTab extends StatelessWidget {
+  const _ToolTab({
+    required this.theme,
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+  final HaptPickerTheme theme;
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? t.colors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(t.radii.button),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: active ? t.colors.onPrimary : t.colors.textPrimary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: t.typography.label.copyWith(
+                  color: active ? t.colors.onPrimary : t.colors.textPrimary,
+                  fontWeight:
+                      active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

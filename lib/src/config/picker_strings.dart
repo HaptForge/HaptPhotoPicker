@@ -82,6 +82,16 @@ abstract class HaptPickerStrings {
   /// without overrides still render readable strings.
   String filterLabel(String id);
 
+  /// Editor tool-tab labels. The picker renders an explicit tool
+  /// strip below the crop canvas — "Crop" reveals aspect-ratio +
+  /// rotate, "Filter" reveals the filter preview chips. Apps with
+  /// only one tool enabled in their `HaptPickerConfig` (e.g. a
+  /// gallery picker that doesn't expose filters) won't see these
+  /// strings rendered, but they're still required so missing
+  /// overrides fail at compile time.
+  String get editorToolCrop;
+  String get editorToolFilter;
+
   /// "Selected N of M" — read out by screen readers when the user
   /// taps a thumbnail.
   String selectionAnnouncement(int n, int max);
@@ -141,6 +151,10 @@ class HaptPickerStringsEn extends HaptPickerStrings {
         'noir' => 'Noir',
         _ => id,
       };
+  @override
+  String get editorToolCrop => 'Crop';
+  @override
+  String get editorToolFilter => 'Filter';
   @override
   String selectionAnnouncement(int n, int max) =>
       'Selected $n of $max';

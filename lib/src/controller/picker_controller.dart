@@ -78,6 +78,17 @@ class HaptPickerController extends ChangeNotifier {
 
   /// Toggle an asset's selection state. Returns true if the
   /// operation took effect; false if it was rejected (max reached).
+  ///
+  /// **Single-pick mode** (`maxSelection == 1`) behaves as
+  /// tap-to-replace: tapping a different thumbnail clears the
+  /// current pick and selects the new one in one move. Without
+  /// this, users had to deselect-then-select-again, which feels
+  /// like a bug in a single-pick context.
+  ///
+  /// **Multi-pick mode** keeps the original semantics: the second
+  /// "add" beyond [HaptPickerConfig.maxSelection] fails so the
+  /// user is explicitly told to deselect first — that's the right
+  /// affordance when the selection ORDER matters (badges show 1/2/3).
   bool toggle(HaptAsset a) {
     if (_selection.contains(a)) {
       _selection.remove(a);
@@ -86,6 +97,17 @@ class HaptPickerController extends ChangeNotifier {
       return true;
     }
     if (atMax) {
+      if (config.maxSelection == 1) {
+        // Tap-to-replace: clear the current single pick + accept
+        // the new one. Crop state for the displaced asset stays in
+        // `_cropStates` (key'd by id) — re-selecting later resumes
+        // the previous transform without surprises.
+        _selection.clear();
+        _selection.add(a);
+        haptics.fire(HaptHapticEvent.select);
+        notifyListeners();
+        return true;
+      }
       haptics.fire(HaptHapticEvent.maxReached);
       return false;
     }
