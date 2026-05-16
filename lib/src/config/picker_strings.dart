@@ -64,6 +64,12 @@ abstract class HaptPickerStrings {
   String get aspectRatioPortrait;
   String get aspectRatioLandscape;
 
+  /// Filter-chip label resolver. Receives the filter's `id`
+  /// (e.g. 'mono', 'vivid'); subclasses return the localized label.
+  /// Unknown ids should return the id itself so custom filters
+  /// without overrides still render readable strings.
+  String filterLabel(String id);
+
   /// "Selected N of M" — read out by screen readers when the user
   /// taps a thumbnail.
   String selectionAnnouncement(int n, int max);
@@ -111,6 +117,18 @@ class HaptPickerStringsEn extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Original',
+        'mono' => 'Mono',
+        'vivid' => 'Vivid',
+        'warm' => 'Warm',
+        'cool' => 'Cool',
+        'bright' => 'Bright',
+        'vintage' => 'Vintage',
+        'noir' => 'Noir',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) =>
       'Selected $n of $max';
 }
@@ -151,6 +169,18 @@ class HaptPickerStringsVi extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Gốc',
+        'mono' => 'Trắng đen',
+        'vivid' => 'Rực rỡ',
+        'warm' => 'Ấm',
+        'cool' => 'Lạnh',
+        'bright' => 'Sáng',
+        'vintage' => 'Cổ điển',
+        'noir' => 'Đen tối',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) => 'Đã chọn $n / $max';
 }
 
@@ -189,6 +219,18 @@ class HaptPickerStringsEs extends HaptPickerStrings {
   String get aspectRatioPortrait => '4:5';
   @override
   String get aspectRatioLandscape => '16:9';
+  @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Original',
+        'mono' => 'Mono',
+        'vivid' => 'Vívido',
+        'warm' => 'Cálido',
+        'cool' => 'Frío',
+        'bright' => 'Brillante',
+        'vintage' => 'Vintage',
+        'noir' => 'Negro',
+        _ => id,
+      };
   @override
   String selectionAnnouncement(int n, int max) =>
       'Seleccionadas $n de $max';
@@ -231,6 +273,18 @@ class HaptPickerStringsFr extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Original',
+        'mono' => 'Mono',
+        'vivid' => 'Vif',
+        'warm' => 'Chaud',
+        'cool' => 'Froid',
+        'bright' => 'Lumineux',
+        'vintage' => 'Vintage',
+        'noir' => 'Noir',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) =>
       'Sélectionnées $n sur $max';
 }
@@ -271,6 +325,18 @@ class HaptPickerStringsDe extends HaptPickerStrings {
   String get aspectRatioPortrait => '4:5';
   @override
   String get aspectRatioLandscape => '16:9';
+  @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Original',
+        'mono' => 'Mono',
+        'vivid' => 'Lebhaft',
+        'warm' => 'Warm',
+        'cool' => 'Kühl',
+        'bright' => 'Hell',
+        'vintage' => 'Vintage',
+        'noir' => 'Noir',
+        _ => id,
+      };
   @override
   String selectionAnnouncement(int n, int max) =>
       '$n von $max ausgewählt';
@@ -313,6 +379,18 @@ class HaptPickerStringsPt extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'Original',
+        'mono' => 'Mono',
+        'vivid' => 'Vívido',
+        'warm' => 'Quente',
+        'cool' => 'Frio',
+        'bright' => 'Brilhante',
+        'vintage' => 'Vintage',
+        'noir' => 'Noir',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) =>
       '$n de $max selecionadas';
 }
@@ -353,6 +431,18 @@ class HaptPickerStringsJa extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'オリジナル',
+        'mono' => 'モノ',
+        'vivid' => 'ビビッド',
+        'warm' => 'ウォーム',
+        'cool' => 'クール',
+        'bright' => 'ブライト',
+        'vintage' => 'ヴィンテージ',
+        'noir' => 'ノワール',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) => '$max 件中 $n 件を選択';
 }
 
@@ -392,6 +482,18 @@ class HaptPickerStringsKo extends HaptPickerStrings {
   @override
   String get aspectRatioLandscape => '16:9';
   @override
+  String filterLabel(String id) => switch (id) {
+        'original' => '원본',
+        'mono' => '모노',
+        'vivid' => '비비드',
+        'warm' => '웜',
+        'cool' => '쿨',
+        'bright' => '브라이트',
+        'vintage' => '빈티지',
+        'noir' => '누아르',
+        _ => id,
+      };
+  @override
   String selectionAnnouncement(int n, int max) => '$max개 중 $n개 선택';
 }
 
@@ -430,6 +532,18 @@ class HaptPickerStringsAr extends HaptPickerStrings {
   String get aspectRatioPortrait => '4:5';
   @override
   String get aspectRatioLandscape => '16:9';
+  @override
+  String filterLabel(String id) => switch (id) {
+        'original' => 'أصلي',
+        'mono' => 'أحادي',
+        'vivid' => 'نابض',
+        'warm' => 'دافئ',
+        'cool' => 'بارد',
+        'bright' => 'ساطع',
+        'vintage' => 'كلاسيكي',
+        'noir' => 'نوار',
+        _ => id,
+      };
   @override
   String selectionAnnouncement(int n, int max) => 'محدد $n من $max';
 }

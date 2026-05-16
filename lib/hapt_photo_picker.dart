@@ -23,6 +23,7 @@ library;
 export 'src/api.dart' show HaptPhotoPicker, HaptPickerResult;
 export 'src/config/picker_config.dart'
     show HaptPickerConfig, HaptMediaType, HaptAspectRatio;
+export 'src/config/picker_filter.dart' show HaptFilter;
 export 'src/config/picker_theme.dart'
     show
         HaptPickerTheme,
@@ -45,7 +46,8 @@ export 'src/config/picker_strings.dart'
         HaptPickerStringsAr;
 export 'src/data/asset.dart' show HaptAsset, HaptAssetKind;
 export 'src/data/album.dart' show HaptAlbum;
-export 'src/controller/picker_controller.dart' show HaptPickerController;
+export 'src/controller/picker_controller.dart'
+    show HaptPickerController, HaptCropState;
 export 'src/util/haptics.dart' show HaptHaptics, HaptHapticEvent;
 export 'src/pipeline/asset_transform.dart'
     show HaptAssetTransform, HaptTransformContext, HaptTransformResult;

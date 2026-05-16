@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../config/picker_config.dart';
+import '../config/picker_filter.dart';
 import '../config/picker_strings.dart';
 import '../config/picker_theme.dart';
 import '../controller/picker_controller.dart';
@@ -114,6 +115,11 @@ class _CropPreviewState extends State<CropPreview> {
     final media = MediaQuery.of(context);
     final maxHeight = media.size.height * 0.42;
 
+    final activeFilter = featured == null
+        ? HaptFilter.original
+        : widget.controller.cropFor(featured).filter;
+    final filters = widget.controller.config.filters;
+
     return Column(
       children: [
         Padding(
@@ -122,22 +128,39 @@ class _CropPreviewState extends State<CropPreview> {
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: AspectRatio(
               aspectRatio: frameRatio,
-              child: _CropCanvas(
-                theme: t,
-                asset: featured,
-                rotationQuarters: featured == null
-                    ? 0
-                    : widget.controller
-                        .cropFor(featured)
-                        .rotationQuarters,
-                transformController: _transform,
-                interacting: _interacting,
-                onInteractionStart: () =>
-                    setState(() => _interacting = true),
-                onInteractionEnd: () =>
-                    setState(() => _interacting = false),
-                onRotate: () =>
-                    widget.controller.rotateFeaturedClockwise(),
+              // LayoutBuilder threads the actual rendered viewport
+              // size back to the controller so the crop engine has
+              // real numbers to invert the InteractiveViewer
+              // transform with. Fires per layout-pass; the
+              // controller's setter is a cheap no-op when the size
+              // hasn't changed.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    widget.controller.setPreviewViewportSize(
+                      Size(constraints.maxWidth, constraints.maxHeight),
+                    );
+                  });
+                  return _CropCanvas(
+                    theme: t,
+                    asset: featured,
+                    rotationQuarters: featured == null
+                        ? 0
+                        : widget.controller
+                            .cropFor(featured)
+                            .rotationQuarters,
+                    filter: activeFilter,
+                    transformController: _transform,
+                    interacting: _interacting,
+                    onInteractionStart: () =>
+                        setState(() => _interacting = true),
+                    onInteractionEnd: () =>
+                        setState(() => _interacting = false),
+                    onRotate: () =>
+                        widget.controller.rotateFeaturedClockwise(),
+                  );
+                },
               ),
             ),
           ),
@@ -149,6 +172,21 @@ class _CropPreviewState extends State<CropPreview> {
             strings: widget.strings,
             controller: widget.controller,
           ),
+        // Filter strip — horizontal scroll of live-preview chips.
+        // Hidden when the config only ships the identity filter
+        // (consumers who want no filter affordance pass
+        // `filters: const [HaptFilter.original]`).
+        if (filters.length > 1 && featured != null) ...[
+          SizedBox(height: t.spacing.xs),
+          _FilterStrip(
+            theme: t,
+            strings: widget.strings,
+            controller: widget.controller,
+            asset: featured,
+            active: activeFilter,
+            filters: filters,
+          ),
+        ],
       ],
     );
   }
@@ -162,6 +200,7 @@ class _CropCanvas extends StatelessWidget {
     required this.theme,
     required this.asset,
     required this.rotationQuarters,
+    required this.filter,
     required this.transformController,
     required this.interacting,
     required this.onInteractionStart,
@@ -172,6 +211,11 @@ class _CropCanvas extends StatelessWidget {
   final HaptPickerTheme theme;
   final HaptAsset? asset;
   final int rotationQuarters;
+
+  /// Active color preset — applied via `ColorFiltered` so the live
+  /// preview matches what the engine will export.
+  final HaptFilter filter;
+
   final TransformationController transformController;
   final bool interacting;
   final VoidCallback onInteractionStart;
@@ -181,6 +225,20 @@ class _CropCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = theme;
+    // The thumbnail subtree, optionally wrapped in a ColorFiltered
+    // when the active filter is non-identity.
+    Widget assetTree = _AssetThumb(
+      asset: asset!,
+      placeholder: t.colors.thumbnailPlaceholder,
+      width: 1400,
+      height: 1400,
+    );
+    if (!filter.isIdentity) {
+      assetTree = ColorFiltered(
+        colorFilter: filter.toColorFilter(),
+        child: assetTree,
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(t.radii.cropFrame),
       child: Stack(
@@ -201,12 +259,7 @@ class _CropCanvas extends StatelessWidget {
               onInteractionEnd: (_) => onInteractionEnd(),
               child: Transform.rotate(
                 angle: rotationQuarters * math.pi / 2,
-                child: _AssetThumb(
-                  asset: asset!,
-                  placeholder: t.colors.thumbnailPlaceholder,
-                  width: 1400,
-                  height: 1400,
-                ),
+                child: assetTree,
               ),
             ),
           IgnorePointer(
@@ -230,6 +283,128 @@ class _CropCanvas extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Horizontal strip of filter chips beneath the crop preview. Each
+/// chip shows a 56-px live thumbnail of the active asset with that
+/// filter applied — uses the same `ColorFilter.matrix` as the main
+/// preview so it's free to render (no rebake of pixels). Tapping a
+/// chip swaps the asset's filter via the controller.
+class _FilterStrip extends StatelessWidget {
+  const _FilterStrip({
+    required this.theme,
+    required this.strings,
+    required this.controller,
+    required this.asset,
+    required this.active,
+    required this.filters,
+  });
+
+  final HaptPickerTheme theme;
+  final HaptPickerStrings strings;
+  final HaptPickerController controller;
+  final HaptAsset asset;
+  final HaptFilter active;
+  final List<HaptFilter> filters;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return SizedBox(
+      height: 78,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => SizedBox(width: t.spacing.xs),
+        itemBuilder: (_, i) {
+          final f = filters[i];
+          final isActive = f == active;
+          return GestureDetector(
+            onTap: () => controller.setFilterForFeatured(f),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isActive
+                          ? t.colors.primary
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: _FilterPreviewThumb(
+                      asset: asset,
+                      filter: f,
+                      placeholder: t.colors.thumbnailPlaceholder,
+                    ),
+                  ),
+                ),
+                SizedBox(height: t.spacing.xxs),
+                Text(
+                  _labelFor(f, strings),
+                  style: t.typography.label.copyWith(
+                    color: isActive
+                        ? t.colors.primary
+                        : t.colors.textSecondary,
+                    fontWeight:
+                        isActive ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _labelFor(HaptFilter f, HaptPickerStrings s) {
+    if (f.label != null) return f.label!;
+    return s.filterLabel(f.id);
+  }
+}
+
+class _FilterPreviewThumb extends StatelessWidget {
+  const _FilterPreviewThumb({
+    required this.asset,
+    required this.filter,
+    required this.placeholder,
+  });
+
+  final HaptAsset asset;
+  final HaptFilter filter;
+  final Color placeholder;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: asset.readThumbnail(width: 120, height: 120),
+      builder: (_, snap) {
+        final bytes = snap.data;
+        if (bytes == null) return Container(color: placeholder);
+        final img = Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        );
+        if (filter.isIdentity) return img;
+        return ColorFiltered(
+          colorFilter: filter.toColorFilter(),
+          child: img,
+        );
+      },
     );
   }
 }

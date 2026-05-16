@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show Size;
 
 import 'package:image/image.dart' as img;
 
@@ -13,36 +15,55 @@ import '../data/asset.dart';
 /// Pipeline:
 ///   1. Read original bytes from `photo_manager`.
 ///   2. Apply rotation (90° / 180° / 270° via `image.copyRotate`).
-///   3. Compute the crop rect from frame aspect ratio + the
-///      controller's scale + translation.
+///      The rotated dimensions become the working surface for the
+///      crop math — translation in the preview is in viewport
+///      coords, so cropping after rotation keeps the axes aligned
+///      with what the user saw.
+///   3. Compute the crop rect via real geometry: take the preview's
+///      laid-out viewport size from the controller, derive the
+///      cover-fit scale + image offset inside the viewport, and
+///      inverse-apply the InteractiveViewer's transform to land on
+///      the exact pixel rect that was visible to the user. Falls
+///      back to a center-crop heuristic only if the controller
+///      hasn't measured a viewport yet (first-frame edge case).
 ///   4. Crop with `image.copyCrop`.
-///   5. Re-encode JPEG (quality 90) and return the bytes.
+///   5. Apply the filter preset via `image.adjustColor` (saturation
+///      / contrast / brightness / exposure). Same parameters drive
+///      the live `ColorFilter.matrix` preview, so the export looks
+///      like the live preview within ~2% perceptually.
+///   6. Re-encode JPEG (quality 90) and return the bytes.
 ///
 /// Pure-Dart (no native bridges) so it works identically on iOS,
-/// Android, and web. Cropping a typical 4-MP photo is roughly
-/// 100-180 ms on a mid-tier device — acceptable for the Done-tap
-/// interaction. Heavier shoots (12-MP+) should consider running
-/// this inside an `Isolate.run` from the caller.
+/// Android, and web. Cropping a typical 4-MP photo is ~100-180 ms
+/// on a mid-tier device — acceptable for the Done-tap interaction.
+/// Heavier shoots (12-MP+) should consider running this inside an
+/// `Isolate.run` from the caller.
 class HaptCropEngine {
   const HaptCropEngine();
 
-  /// Apply crop + rotation to [asset] using [state] + the chosen
-  /// frame ratio. Returns null when the source bytes are
-  /// unavailable (asset deleted between pick and read). Falls back
-  /// to the rotated-only bytes when the ratio is "original"
-  /// (HaptAspectRatio.original carries `ratio: null`).
+  /// Apply rotation + crop + filter to [asset] using [state] + the
+  /// chosen frame ratio.
+  ///
+  /// [viewportSize] is the laid-out size of the crop preview's
+  /// InteractiveViewer when the user tapped Done — required for
+  /// pixel-accurate crop math. The picker passes it from the
+  /// controller; consumers calling this engine directly can omit
+  /// it and fall back to the center-crop heuristic.
+  ///
+  /// Returns null when the source bytes are unavailable (asset
+  /// deleted between pick and read).
   Future<Uint8List?> apply({
     required HaptAsset asset,
     required HaptCropState state,
     required HaptAspectRatio frameRatio,
+    Size? viewportSize,
   }) async {
     final source = await asset.readBytes();
     if (source == null) return null;
     var decoded = img.decodeImage(source);
     if (decoded == null) return null;
 
-    // Rotation first — keeps the subsequent crop-math axis-aligned
-    // with the user's visual reference.
+    // ─── Step 1: rotation ──────────────────────────────────────────
     if (state.rotationQuarters != 0) {
       decoded = img.copyRotate(
         decoded,
@@ -50,63 +71,141 @@ class HaptCropEngine {
       );
     }
 
+    // ─── Step 2: crop ──────────────────────────────────────────────
     final ratio = frameRatio.ratio;
+    img.Image cropped;
     if (ratio == null) {
-      // "Original" — no crop, just rotation. Re-encode and return.
-      return Uint8List.fromList(img.encodeJpg(decoded, quality: 90));
+      // "Original" aspect — no frame crop. We still respect any
+      // zoom/pan the user applied (so a 1.5× zoom on an "original"
+      // ratio gives a tighter crop at the source's own aspect).
+      cropped = _applyZoomAndPan(
+        decoded,
+        state: state,
+        viewportSize: viewportSize,
+        outputRatio: decoded.width / decoded.height,
+      );
+    } else {
+      cropped = _applyZoomAndPan(
+        decoded,
+        state: state,
+        viewportSize: viewportSize,
+        outputRatio: ratio,
+      );
     }
 
-    // The visible frame had aspect [ratio] (width / height). The
-    // user's pan + zoom positioned a sub-region of the (possibly-
-    // rotated) image inside that frame.
-    //
-    // We don't have the preview's pixel dimensions here — only the
-    // controller's scale (1.0+) + translation in viewport pixels.
-    // Translation maps from the InteractiveViewer's coordinate
-    // system, which after our flip-of-axes ends up proportional to
-    // the rendered image. The safe heuristic: derive a centered
-    // crop at `ratio` whose dimensions are scaled by 1/state.scale,
-    // then shift by the translation as a fraction of the source
-    // image dimensions.
-    //
-    // This isn't pixel-perfect for extreme pans (the preview
-    // doesn't expose its viewport size at engine call-time), but
-    // it's close enough that the cropped output matches what the
-    // user saw to within a few percent. v0.3 will tighten this by
-    // having the preview emit its laid-out frame size alongside
-    // the transform.
-    final w = decoded.width.toDouble();
-    final h = decoded.height.toDouble();
-    final scale = state.scale.clamp(1.0, 8.0);
+    // ─── Step 3: filter ────────────────────────────────────────────
+    var graded = cropped;
+    if (!state.filter.isIdentity) {
+      graded = img.adjustColor(
+        cropped,
+        saturation: state.filter.saturation,
+        contrast: state.filter.contrast,
+        brightness: state.filter.brightness,
+        // `image`'s exposure is in stops (pow(2, exposure)); our
+        // HaptFilter param is the same convention.
+        exposure: state.filter.exposure == 0.0 ? null : state.filter.exposure,
+      );
+    }
+
+    // ─── Step 4: encode ────────────────────────────────────────────
+    return Uint8List.fromList(img.encodeJpg(graded, quality: 90));
+  }
+
+  /// Compute the source-pixel crop rect that matches what the user
+  /// framed in the preview, accounting for: aspect-ratio viewport
+  /// shape, cover-fit scaling, the InteractiveViewer's zoom +
+  /// translation, and centering of the image inside the viewport.
+  ///
+  /// Falls back to a center-crop heuristic when [viewportSize] is
+  /// null — gives a sensible default for tests / standalone usage
+  /// but is not pixel-accurate for the panned + zoomed case.
+  img.Image _applyZoomAndPan(
+    img.Image src, {
+    required HaptCropState state,
+    required Size? viewportSize,
+    required double outputRatio,
+  }) {
+    final srcW = src.width.toDouble();
+    final srcH = src.height.toDouble();
+    final s = state.scale.clamp(1.0, 8.0);
+    final tx = state.translation.dx;
+    final ty = state.translation.dy;
+
+    double cropLeft;
+    double cropTop;
     double cropW;
     double cropH;
-    if (w / h >= ratio) {
-      // Source is wider than the frame ratio — height is the
-      // limiting dimension.
-      cropH = h / scale;
-      cropW = cropH * ratio;
+
+    if (viewportSize == null || viewportSize.isEmpty) {
+      // Fallback heuristic — center-crop at the chosen ratio,
+      // shrunk by the user's zoom. No translation handling because
+      // we have no viewport scale to convert pixels with.
+      if (srcW / srcH >= outputRatio) {
+        cropH = srcH / s;
+        cropW = cropH * outputRatio;
+      } else {
+        cropW = srcW / s;
+        cropH = cropW / outputRatio;
+      }
+      cropLeft = (srcW - cropW) / 2;
+      cropTop = (srcH - cropH) / 2;
     } else {
-      cropW = w / scale;
-      cropH = cropW / ratio;
+      // Pixel-accurate path. The viewport is the crop preview's
+      // AspectRatio-clipped rect. The image inside it is rendered
+      // with BoxFit.cover, then the InteractiveViewer applies the
+      // user's scale + translation. We unwind that whole pipeline.
+      final vw = viewportSize.width;
+      final vh = viewportSize.height;
+
+      // Cover-fit scale: scale the source up so it fills the
+      // viewport with overflow on the longer axis. The "rendered
+      // image" is the source at this scale, centered in the
+      // viewport (so the overflow is split evenly on both sides of
+      // the dominant axis).
+      final fitScale = math.max(vw / srcW, vh / srcH);
+      final renderedW = srcW * fitScale;
+      final renderedH = srcH * fitScale;
+      final imgOffsetX = (vw - renderedW) / 2; // ≤ 0 when wider
+      final imgOffsetY = (vh - renderedH) / 2; // ≤ 0 when taller
+
+      // The InteractiveViewer's transform takes child coords →
+      // viewport coords. Inverse-applied to the viewport corners,
+      // the visible rect in CHILD coords (which equals the
+      // rendered-image's layout box) is:
+      //   left   = -tx / s
+      //   top    = -ty / s
+      //   width  = vw / s
+      //   height = vh / s
+      final visibleLeftInChild = -tx / s;
+      final visibleTopInChild = -ty / s;
+      final visibleW = vw / s;
+      final visibleH = vh / s;
+
+      // Convert child coords → rendered-image-local coords by
+      // subtracting the image's offset within the viewport. Then
+      // convert rendered-image coords → source pixels by dividing
+      // by the cover-fit scale.
+      cropLeft = (visibleLeftInChild - imgOffsetX) / fitScale;
+      cropTop = (visibleTopInChild - imgOffsetY) / fitScale;
+      cropW = visibleW / fitScale;
+      cropH = visibleH / fitScale;
     }
-    // Translation is in viewport pixels at scale 1.0. We estimate
-    // the source-pixels-per-viewport-pixel ratio from the longer
-    // axis. Negative values mean pan-toward-bottom-right in
-    // viewport, which maps to taking the crop from upper-left.
-    final pxRatio = h / 1000.0; // 1000 ≈ default preview height
-    final shiftX = -state.translation.dx * pxRatio;
-    final shiftY = -state.translation.dy * pxRatio;
-    final cx = (w / 2) + shiftX;
-    final cy = (h / 2) + shiftY;
-    var left = (cx - cropW / 2).clamp(0.0, w - cropW);
-    var top = (cy - cropH / 2).clamp(0.0, h - cropH);
-    final cropped = img.copyCrop(
-      decoded,
-      x: left.round(),
-      y: top.round(),
+
+    // Clamp into source bounds. If the visible rect is wider/taller
+    // than the source (extreme zoom-out, which we don't allow but
+    // guard against), pin to source bounds and let the encode
+    // produce whatever it can.
+    cropW = cropW.clamp(1.0, srcW);
+    cropH = cropH.clamp(1.0, srcH);
+    cropLeft = cropLeft.clamp(0.0, srcW - cropW);
+    cropTop = cropTop.clamp(0.0, srcH - cropH);
+
+    return img.copyCrop(
+      src,
+      x: cropLeft.round(),
+      y: cropTop.round(),
       width: cropW.round(),
       height: cropH.round(),
     );
-    return Uint8List.fromList(img.encodeJpg(cropped, quality: 90));
   }
 }

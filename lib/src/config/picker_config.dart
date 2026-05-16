@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'picker_filter.dart';
+
 /// Compile-time configuration for a single `HaptPhotoPicker.pick`
 /// invocation. Construct it once per call site; share it across
 /// calls if you want consistent behaviour.
@@ -11,6 +13,7 @@ class HaptPickerConfig {
     this.mediaType = HaptMediaType.image,
     this.aspectRatios = const [HaptAspectRatio.original],
     this.initialAspectRatio,
+    this.filters = HaptFilter.defaults,
     this.gridColumns = 4,
     this.enableHaptics = true,
     this.requireAllSelectionsBeforeDone = false,
@@ -33,6 +36,12 @@ class HaptPickerConfig {
   /// default if [initialAspectRatio] is null.
   final List<HaptAspectRatio> aspectRatios;
   final HaptAspectRatio? initialAspectRatio;
+
+  /// Color-grading presets surfaced in the filter strip beneath the
+  /// crop preview. Override to ship a branded look book; set to
+  /// `const [HaptFilter.original]` to hide the strip entirely (only
+  /// the identity filter remains, no strip rendered).
+  final List<HaptFilter> filters;
 
   /// Grid column count. 4 is Instagram-default. 3 = thicker
   /// thumbnails, 5+ = denser.
@@ -58,6 +67,7 @@ class HaptPickerConfig {
     HaptMediaType? mediaType,
     List<HaptAspectRatio>? aspectRatios,
     HaptAspectRatio? initialAspectRatio,
+    List<HaptFilter>? filters,
     int? gridColumns,
     bool? enableHaptics,
     bool? requireAllSelectionsBeforeDone,
@@ -70,6 +80,7 @@ class HaptPickerConfig {
         mediaType: mediaType ?? this.mediaType,
         aspectRatios: aspectRatios ?? this.aspectRatios,
         initialAspectRatio: initialAspectRatio ?? this.initialAspectRatio,
+        filters: filters ?? this.filters,
         gridColumns: gridColumns ?? this.gridColumns,
         enableHaptics: enableHaptics ?? this.enableHaptics,
         requireAllSelectionsBeforeDone: requireAllSelectionsBeforeDone ??

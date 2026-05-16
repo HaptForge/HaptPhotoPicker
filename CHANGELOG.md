@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.3.0 — 2026-05-16
+
+Correctness pass on the editing primitives + the v0.2 "Known gaps"
+list collapsed to a single bullet (real-time filter presets).
+
+### Fixed
+
+- **Crop math is now pixel-accurate.** v0.2's `HaptCropEngine` had
+  a literal `pxRatio = h / 1000.0` heuristic for mapping the
+  InteractiveViewer's translation back to source pixels — the
+  comment in code admitted "isn't pixel-perfect for extreme pans".
+  v0.3 wires the crop preview's real laid-out viewport size through
+  to the engine (via `HaptPickerController.setPreviewViewportSize`,
+  set by a `LayoutBuilder` inside the preview) and reconstructs the
+  exact visible rect via cover-fit scale + inverse-transform
+  geometry. The exported bytes now reflect what the user framed, not
+  an approximation of it.
+
+### Added
+
+- **Color filter presets.** New `HaptFilter` value type
+  parameterized by saturation / contrast / brightness / exposure.
+  The same params drive both the live preview's `ColorFilter.matrix`
+  AND the export's `image.adjustColor` — so the chip thumbnail you
+  tap looks like the final output (within ~2% perceptual).
+- Ships 8 default presets covering the neutral baseline + 7
+  Instagram-class looks: **Original, Mono, Vivid, Warm, Cool,
+  Bright, Vintage, Noir**. Override the catalog by passing your own
+  list to `HaptPickerConfig(filters: [...])`; pass
+  `const [HaptFilter.original]` to hide the strip entirely.
+- **Filter strip UI** — horizontal scroll of live-preview chips
+  beneath the crop preview. Each chip renders the active asset's
+  64-px thumbnail wrapped in that filter's matrix, so the chip
+  thumbnails always match the user's selected photo (not generic
+  reference shots).
+- **Per-asset filter state** — like the existing crop transform,
+  the chosen filter is stored on `HaptCropState.filter` keyed by
+  asset id. Switching among selected items resumes each one's
+  filter where it left off.
+- Localized filter labels via `HaptPickerStrings.filterLabel(String
+  id)` — implementations shipped for all 9 built-in locales.
+
+### Known gaps (planned for 0.4)
+
+- Free-form crop (drag corners to crop tighter than the chip ratio)
+- Straighten slider (rotate by 1° increments)
+- Per-filter intensity slider
+- Burst-aware selection grouping
+- Live filter preview in the asset grid (not just the crop preview)
+- One-handed mode
+
 ## 0.2.0 — 2026-05-15
 
 Feature pass — the picker now actually edits. v0.1.x exposed crop

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../config/picker_config.dart';
+import '../config/picker_filter.dart';
 import '../data/album.dart';
 import '../data/asset.dart';
 import '../util/haptics.dart';
@@ -175,6 +176,43 @@ class HaptPickerController extends ChangeNotifier {
     haptics.fire(HaptHapticEvent.snap);
     notifyListeners();
   }
+
+  /// Replace the color filter applied to the featured asset. Lets
+  /// the user A/B between presets in the filter strip — same UX as
+  /// Instagram's Filter row beneath the cropper.
+  void setFilterForFeatured(HaptFilter filter) {
+    final a = featuredAsset;
+    if (a == null) return;
+    final cur = cropFor(a);
+    if (cur.filter == filter) return;
+    _cropStates[a.id] = cur.copyWith(filter: filter);
+    haptics.fire(HaptHapticEvent.snap);
+    notifyListeners();
+  }
+
+  // ─── Preview viewport size ─────────────────────────────────────────
+  //
+  // The crop preview widget reports its laid-out viewport size here
+  // every time the layout changes (chosen aspect ratio + screen
+  // size). The crop engine consumes this on Done so it can map the
+  // InteractiveViewer's translation (which is in viewport pixels)
+  // back to source-pixel coordinates with real geometry — no more
+  // hand-waved "h / 1000" heuristic.
+
+  Size? _previewViewportSize;
+  Size? get previewViewportSize => _previewViewportSize;
+
+  /// Called by `CropPreview`'s LayoutBuilder. Cheap — only fires a
+  /// notification when the size actually changes (debounces against
+  /// the per-frame rebuild noise during animations).
+  void setPreviewViewportSize(Size size) {
+    if (_previewViewportSize == size) return;
+    _previewViewportSize = size;
+    // No `notifyListeners` — viewport size is read-on-Done, not
+    // observed by any UI. Skipping the notification keeps the
+    // preview's `AnimatedBuilder` from rebuilding when its own
+    // layout reports back.
+  }
 }
 
 /// Per-asset crop state. Holds the InteractiveViewer transform
@@ -187,6 +225,7 @@ class HaptCropState {
     required this.scale,
     required this.translation,
     required this.rotationQuarters,
+    required this.filter,
   });
 
   /// Uniform scale factor. 1.0 = no zoom. Clamped to
@@ -199,22 +238,29 @@ class HaptCropState {
   /// 0 / 1 / 2 / 3 representing 0° / 90° / 180° / 270° clockwise.
   final int rotationQuarters;
 
-  /// Untouched state — no zoom, centered, no rotation. The crop
-  /// preview seeds with this every time the user switches to a new
-  /// asset.
+  /// Color preset applied to the asset. `HaptFilter.original` is
+  /// the identity / no-op default.
+  final HaptFilter filter;
+
+  /// Untouched state — no zoom, centered, no rotation, no filter.
+  /// The crop preview seeds with this every time the user switches
+  /// to a new asset.
   const HaptCropState.identity()
       : scale = 1.0,
         translation = Offset.zero,
-        rotationQuarters = 0;
+        rotationQuarters = 0,
+        filter = HaptFilter.original;
 
   HaptCropState copyWith({
     double? scale,
     Offset? translation,
     int? rotationQuarters,
+    HaptFilter? filter,
   }) =>
       HaptCropState(
         scale: scale ?? this.scale,
         translation: translation ?? this.translation,
         rotationQuarters: rotationQuarters ?? this.rotationQuarters,
+        filter: filter ?? this.filter,
       );
 }

@@ -144,6 +144,10 @@ class _HaptPickerSheetState extends State<HaptPickerSheet> {
         asset: asset,
         state: _controller.cropFor(asset),
         frameRatio: frameRatio,
+        // Real viewport size from the crop preview's LayoutBuilder —
+        // lets the engine map InteractiveViewer translation back to
+        // source pixels with real geometry instead of a heuristic.
+        viewportSize: _controller.previewViewportSize,
       );
       for (final t in widget.pipeline) {
         final r = await t.run(
