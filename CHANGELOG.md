@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.1 — 2026-05-16
+
+Smoothness pass on the crop preview + filter strip — no flicker on
+filter selection, no overflow on small phones.
+
+### Fixed
+
+- **Main asset thumbnail no longer flickers on rebuild.** `_AssetThumb`
+  was a `StatelessWidget` whose `FutureBuilder` started a fresh
+  `readThumbnail` call on every parent rebuild — every filter tap
+  (which fires `notifyListeners`) re-fetched the image. Converted
+  to a `StatefulWidget` that captures the Future once per
+  `(asset, dimensions)` tuple so the image stays mounted across
+  rebuilds. `gaplessPlayback` was already there but couldn't help
+  with the Future churn.
+- **Filter strip no longer re-fetches per chip per rebuild.**
+  Previously each of the 8 chips owned a `FutureBuilder<Uint8List?>`
+  asking photo_manager for the same 120-px thumbnail on every
+  rebuild. Hoisted the Future into the strip's State; the 8 chips
+  now share the same bytes and just compose different
+  `ColorFiltered` wrappers on top.
+- **Filter strip height trimmed 78 → 66 px** so it fits the iPhone
+  SE 1st-gen-class viewport without squeezing the asset grid below
+  the 100-px usability floor. Chip dimensions also slimmed (46×46
+  with 10-pt label) — visually denser but still readable.
+
 ## 0.4.0 — 2026-05-16
 
 Scope correction on the strings surface.

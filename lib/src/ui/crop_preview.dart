@@ -288,11 +288,16 @@ class _CropCanvas extends StatelessWidget {
 }
 
 /// Horizontal strip of filter chips beneath the crop preview. Each
-/// chip shows a 56-px live thumbnail of the active asset with that
-/// filter applied — uses the same `ColorFilter.matrix` as the main
-/// preview so it's free to render (no rebake of pixels). Tapping a
-/// chip swaps the asset's filter via the controller.
-class _FilterStrip extends StatelessWidget {
+/// chip shows a live thumbnail of the active asset with that
+/// filter's matrix applied — uses the same parameters as the main
+/// preview so chips and exported bytes stay in sync.
+///
+/// Stateful so we can capture the asset's 120-px thumbnail Future
+/// ONCE on the active asset and reuse the bytes across all 8
+/// filter chips. Without this caching, the previous build re-fetched
+/// the same thumbnail per-chip per-rebuild, which flickered every
+/// time the user tapped a filter (which itself triggers a rebuild).
+class _FilterStrip extends StatefulWidget {
   const _FilterStrip({
     required this.theme,
     required this.strings,
@@ -310,60 +315,93 @@ class _FilterStrip extends StatelessWidget {
   final List<HaptFilter> filters;
 
   @override
+  State<_FilterStrip> createState() => _FilterStripState();
+}
+
+class _FilterStripState extends State<_FilterStrip> {
+  late Future<Uint8List?> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.asset.readThumbnail(width: 120, height: 120);
+  }
+
+  @override
+  void didUpdateWidget(_FilterStrip old) {
+    super.didUpdateWidget(old);
+    if (old.asset.id != widget.asset.id) {
+      _bytes = widget.asset.readThumbnail(width: 120, height: 120);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = theme;
+    final t = widget.theme;
     return SizedBox(
-      height: 78,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
-        itemCount: filters.length,
-        separatorBuilder: (_, __) => SizedBox(width: t.spacing.xs),
-        itemBuilder: (_, i) {
-          final f = filters[i];
-          final isActive = f == active;
-          return GestureDetector(
-            onTap: () => controller.setFilterForFeatured(f),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isActive
-                          ? t.colors.primary
-                          : Colors.transparent,
-                      width: 2,
+      // Compact-but-readable. 48-px chip + 4-px gap + 11-px label =
+      // ~64-px strip. Tested down to iPhone SE 1st-gen-class viewports
+      // where the previous 78-px strip squeezed the asset grid below
+      // the usability threshold.
+      height: 66,
+      child: FutureBuilder<Uint8List?>(
+        future: _bytes,
+        builder: (_, snap) {
+          final bytes = snap.data;
+          return ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
+            itemCount: widget.filters.length,
+            separatorBuilder: (_, __) => SizedBox(width: t.spacing.xs),
+            itemBuilder: (_, i) {
+              final f = widget.filters[i];
+              final isActive = f == widget.active;
+              return GestureDetector(
+                onTap: () => widget.controller.setFilterForFeatured(f),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: isActive
+                              ? t.colors.primary
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(1.5),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: bytes == null
+                            ? Container(
+                                color: t.colors.thumbnailPlaceholder)
+                            : _FilterPreviewThumb(
+                                bytes: bytes,
+                                filter: f,
+                              ),
+                      ),
                     ),
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: _FilterPreviewThumb(
-                      asset: asset,
-                      filter: f,
-                      placeholder: t.colors.thumbnailPlaceholder,
+                    const SizedBox(height: 3),
+                    Text(
+                      _labelFor(f, widget.strings),
+                      style: t.typography.label.copyWith(
+                        color: isActive
+                            ? t.colors.primary
+                            : t.colors.textSecondary,
+                        fontWeight:
+                            isActive ? FontWeight.w700 : FontWeight.w500,
+                        fontSize: 10,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                SizedBox(height: t.spacing.xxs),
-                Text(
-                  _labelFor(f, strings),
-                  style: t.typography.label.copyWith(
-                    color: isActive
-                        ? t.colors.primary
-                        : t.colors.textSecondary,
-                    fontWeight:
-                        isActive ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
@@ -376,35 +414,29 @@ class _FilterStrip extends StatelessWidget {
   }
 }
 
+/// Pure render of pre-fetched bytes under a filter matrix. No
+/// FutureBuilder here — the parent strip owns the single shared
+/// Future for the asset.
 class _FilterPreviewThumb extends StatelessWidget {
   const _FilterPreviewThumb({
-    required this.asset,
+    required this.bytes,
     required this.filter,
-    required this.placeholder,
   });
 
-  final HaptAsset asset;
+  final Uint8List bytes;
   final HaptFilter filter;
-  final Color placeholder;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: asset.readThumbnail(width: 120, height: 120),
-      builder: (_, snap) {
-        final bytes = snap.data;
-        if (bytes == null) return Container(color: placeholder);
-        final img = Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-        );
-        if (filter.isIdentity) return img;
-        return ColorFiltered(
-          colorFilter: filter.toColorFilter(),
-          child: img,
-        );
-      },
+    final img = Image.memory(
+      bytes,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+    );
+    if (filter.isIdentity) return img;
+    return ColorFiltered(
+      colorFilter: filter.toColorFilter(),
+      child: img,
     );
   }
 }
@@ -531,9 +563,14 @@ class _AspectRatioChips extends StatelessWidget {
   }
 }
 
-/// FutureBuilder-based thumbnail loader. Shared between the crop
-/// canvas and the asset grid.
-class _AssetThumb extends StatelessWidget {
+/// Stateful thumbnail loader. The Future is captured once per
+/// (asset, dimensions) tuple — without this, every parent rebuild
+/// (filter selection, transform tick, etc.) starts a fresh
+/// `readThumbnail` call and the image flickers between the cached
+/// resolution and the placeholder while photo_manager re-honors
+/// the request. `gaplessPlayback` plus a stable Future keeps the
+/// preview rock-steady across rebuilds.
+class _AssetThumb extends StatefulWidget {
   const _AssetThumb({
     required this.asset,
     required this.placeholder,
@@ -547,12 +584,41 @@ class _AssetThumb extends StatelessWidget {
   final int height;
 
   @override
+  State<_AssetThumb> createState() => _AssetThumbState();
+}
+
+class _AssetThumbState extends State<_AssetThumb> {
+  late Future<Uint8List?> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = widget.asset.readThumbnail(
+      width: widget.width,
+      height: widget.height,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AssetThumb old) {
+    super.didUpdateWidget(old);
+    if (old.asset.id != widget.asset.id ||
+        old.width != widget.width ||
+        old.height != widget.height) {
+      _bytes = widget.asset.readThumbnail(
+        width: widget.width,
+        height: widget.height,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<Uint8List?>(
-      future: asset.readThumbnail(width: width, height: height),
+      future: _bytes,
       builder: (_, snap) {
         final bytes = snap.data;
-        if (bytes == null) return Container(color: placeholder);
+        if (bytes == null) return Container(color: widget.placeholder);
         return Image.memory(
           bytes,
           fit: BoxFit.cover,
