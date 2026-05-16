@@ -5,6 +5,7 @@ import 'dart:ui' show Size;
 import 'package:image/image.dart' as img;
 
 import '../config/picker_config.dart';
+import '../config/picker_filter.dart';
 import '../controller/picker_controller.dart';
 import '../data/asset.dart';
 
@@ -71,6 +72,14 @@ class HaptCropEngine {
       );
     }
 
+    // ─── Step 1b: flip (horizontal / vertical) ─────────────────────
+    if (state.flipH) {
+      decoded = img.flipHorizontal(decoded);
+    }
+    if (state.flipV) {
+      decoded = img.flipVertical(decoded);
+    }
+
     // ─── Step 2: crop ──────────────────────────────────────────────
     final ratio = frameRatio.ratio;
     img.Image cropped;
@@ -93,17 +102,27 @@ class HaptCropEngine {
       );
     }
 
-    // ─── Step 3: filter ────────────────────────────────────────────
+    // ─── Step 3: composed filter ──────────────────────────────────
+    // Compose preset (scaled by intensity) + manual adjustments.
+    // Single `adjustColor` call — multiple `adjustColor` passes
+    // wouldn't be commutative (the second pass scales by the first's
+    // contrast offset etc), so we collapse to one pre-baked filter.
+    final effective = HaptFilter.compose(
+      preset: state.filter,
+      intensity: state.filterIntensity,
+      adjustments: state.adjustments,
+    );
     var graded = cropped;
-    if (!state.filter.isIdentity) {
+    if (!effective.isIdentity) {
       graded = img.adjustColor(
         cropped,
-        saturation: state.filter.saturation,
-        contrast: state.filter.contrast,
-        brightness: state.filter.brightness,
+        saturation: effective.saturation,
+        contrast: effective.contrast,
+        brightness: effective.brightness,
         // `image`'s exposure is in stops (pow(2, exposure)); our
         // HaptFilter param is the same convention.
-        exposure: state.filter.exposure == 0.0 ? null : state.filter.exposure,
+        exposure:
+            effective.exposure == 0.0 ? null : effective.exposure,
       );
     }
 

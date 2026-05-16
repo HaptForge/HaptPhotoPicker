@@ -165,4 +165,40 @@ class HaptFilter {
     vintage,
     noir,
   ];
+
+  /// Compose a final filter from a preset + intensity + manual
+  /// adjustments. Used by both the live preview and the engine so
+  /// the two stay in lockstep.
+  ///
+  /// Pipeline:
+  ///   1. Interpolate the preset's params towards identity by
+  ///      `(1 - intensity)`. Multiplicative params (saturation,
+  ///      contrast, brightness) lerp toward 1.0; additive params
+  ///      (exposure) lerp toward 0.0.
+  ///   2. Combine with the user's manual adjustments —
+  ///      multiplicative stacks via multiplication, exposure adds.
+  ///
+  /// Returns `HaptFilter.original` when nothing's set so the
+  /// `isIdentity` short-circuit kicks in and the preview skips the
+  /// `ColorFiltered` wrap entirely (no GPU cost for unedited photos).
+  static HaptFilter compose({
+    required HaptFilter preset,
+    required double intensity,
+    required HaptFilter adjustments,
+  }) {
+    final i = intensity.clamp(0.0, 1.0);
+    double mulLerp(double v) => 1.0 + (v - 1.0) * i;
+    double addLerp(double v) => v * i;
+    final sat = mulLerp(preset.saturation) * adjustments.saturation;
+    final con = mulLerp(preset.contrast) * adjustments.contrast;
+    final bri = mulLerp(preset.brightness) * adjustments.brightness;
+    final exp = addLerp(preset.exposure) + adjustments.exposure;
+    return HaptFilter(
+      id: 'composed',
+      saturation: sat,
+      contrast: con,
+      brightness: bri,
+      exposure: exp,
+    );
+  }
 }

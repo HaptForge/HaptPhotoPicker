@@ -212,6 +212,50 @@ class HaptPickerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set the chosen preset's intensity (0..1). 0 = no effect
+  /// (identity), 1 = full preset. Bound to the slider that sits
+  /// beneath the filter strip.
+  void setFilterIntensityForFeatured(double intensity) {
+    final a = featuredAsset;
+    if (a == null) return;
+    final clamped = intensity.clamp(0.0, 1.0);
+    final cur = cropFor(a);
+    if (cur.filterIntensity == clamped) return;
+    _cropStates[a.id] = cur.copyWith(filterIntensity: clamped);
+    notifyListeners();
+  }
+
+  /// Replace the manual adjustments on the featured asset. Called
+  /// every time the user moves a slider in the Adjust tab.
+  void setAdjustmentsForFeatured(HaptFilter adjustments) {
+    final a = featuredAsset;
+    if (a == null) return;
+    final cur = cropFor(a);
+    if (cur.adjustments == adjustments) return;
+    _cropStates[a.id] = cur.copyWith(adjustments: adjustments);
+    notifyListeners();
+  }
+
+  /// Toggle horizontal mirror on the featured asset.
+  void toggleFlipHForFeatured() {
+    final a = featuredAsset;
+    if (a == null) return;
+    final cur = cropFor(a);
+    _cropStates[a.id] = cur.copyWith(flipH: !cur.flipH);
+    haptics.fire(HaptHapticEvent.snap);
+    notifyListeners();
+  }
+
+  /// Toggle vertical mirror on the featured asset.
+  void toggleFlipVForFeatured() {
+    final a = featuredAsset;
+    if (a == null) return;
+    final cur = cropFor(a);
+    _cropStates[a.id] = cur.copyWith(flipV: !cur.flipV);
+    haptics.fire(HaptHapticEvent.snap);
+    notifyListeners();
+  }
+
   // ─── Preview viewport size ─────────────────────────────────────────
   //
   // The crop preview widget reports its laid-out viewport size here
@@ -248,6 +292,10 @@ class HaptCropState {
     required this.translation,
     required this.rotationQuarters,
     required this.filter,
+    this.filterIntensity = 1.0,
+    this.adjustments = HaptFilter.original,
+    this.flipH = false,
+    this.flipV = false,
   });
 
   /// Uniform scale factor. 1.0 = no zoom. Clamped to
@@ -261,8 +309,31 @@ class HaptCropState {
   final int rotationQuarters;
 
   /// Color preset applied to the asset. `HaptFilter.original` is
-  /// the identity / no-op default.
+  /// the identity / no-op default. The PRESET is independent of
+  /// the user's manual sliders ([adjustments]) — the engine
+  /// composes them at render time.
   final HaptFilter filter;
+
+  /// Strength of the chosen preset filter — 1.0 = full preset,
+  /// 0.0 = no effect (identity). Interpolates linearly between
+  /// the preset's params and the identity values. The "Filter"
+  /// tab exposes this via an intensity slider that only shows
+  /// when a non-identity filter is selected.
+  final double filterIntensity;
+
+  /// User's manual adjustments stacked on top of the preset.
+  /// Reuses the [HaptFilter] shape so the engine + preview don't
+  /// need a second param channel — the "Adjust" tab's 4 sliders
+  /// edit this struct directly. Default is the identity filter
+  /// (no manual adjustment).
+  final HaptFilter adjustments;
+
+  /// Mirror the image horizontally / vertically. The engine
+  /// applies these AFTER rotation but BEFORE crop, so the
+  /// thumbnail + the chosen aspect ratio frame stay consistent
+  /// with what the user sees in the preview.
+  final bool flipH;
+  final bool flipV;
 
   /// Untouched state — no zoom, centered, no rotation, no filter.
   /// The crop preview seeds with this every time the user switches
@@ -271,18 +342,30 @@ class HaptCropState {
       : scale = 1.0,
         translation = Offset.zero,
         rotationQuarters = 0,
-        filter = HaptFilter.original;
+        filter = HaptFilter.original,
+        filterIntensity = 1.0,
+        adjustments = HaptFilter.original,
+        flipH = false,
+        flipV = false;
 
   HaptCropState copyWith({
     double? scale,
     Offset? translation,
     int? rotationQuarters,
     HaptFilter? filter,
+    double? filterIntensity,
+    HaptFilter? adjustments,
+    bool? flipH,
+    bool? flipV,
   }) =>
       HaptCropState(
         scale: scale ?? this.scale,
         translation: translation ?? this.translation,
         rotationQuarters: rotationQuarters ?? this.rotationQuarters,
         filter: filter ?? this.filter,
+        filterIntensity: filterIntensity ?? this.filterIntensity,
+        adjustments: adjustments ?? this.adjustments,
+        flipH: flipH ?? this.flipH,
+        flipV: flipV ?? this.flipV,
       );
 }

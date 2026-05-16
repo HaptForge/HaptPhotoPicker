@@ -1,6 +1,6 @@
 name: hapt_photo_picker
 description: An Instagram-grade photo picker for Flutter with full token theming, fully overridable strings, choreographed haptics, and a pluggable post-processing pipeline.
-version: 0.5.0
+version: 0.6.0
 homepage: https://github.com/HaptForge/HaptPhotoPicker
 repository: https://github.com/HaptForge/HaptPhotoPicker
 issue_tracker: https://github.com/HaptForge/HaptPhotoPicker/issues

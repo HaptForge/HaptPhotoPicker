@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.6.0 — 2026-05-17
+
+Closes the "photo editor parity" gap — three new tools land in the
+editor surface that v0.5 introduced the tab strip for.
+
+### Added
+
+- **Adjust tab (3rd tool)** — four sliders for manual color
+  grading: Brightness, Contrast, Saturation, Exposure. Each
+  slider's label is tappable to snap the value back to its
+  identity (1.0 for multiplicative, 0.0 for exposure). A Reset
+  button below the sliders zeroes all four at once when any are
+  active. Reuses the existing `HaptFilter` value type as the
+  state struct so there's no second param-channel to maintain.
+- **Filter intensity slider** — appears under the filter strip
+  in the Filter tab whenever a non-identity preset is selected.
+  Slides 0–100%; interpolates the preset's params toward identity
+  by `(1 − intensity)`. Lets users dial back e.g. Vivid from
+  "Instagram-loud" to "just slightly punchy".
+- **Flip horizontal / vertical buttons** in the Crop tab's
+  action row, alongside Rotate. Apply as `Transform.scale` in
+  the live preview (zero CPU) + `img.flipHorizontal` /
+  `img.flipVertical` in the engine on Done.
+- `HaptFilter.compose({preset, intensity, adjustments})` — pure
+  static helper that combines a preset (scaled by intensity)
+  with the user's manual adjustments into a single final
+  `HaptFilter`. Used by both the live preview's `ColorFiltered`
+  and the engine's `img.adjustColor` so the two stay byte-for-
+  byte (within ~2%) consistent.
+- Controller methods to drive the new state:
+  `setFilterIntensityForFeatured`, `setAdjustmentsForFeatured`,
+  `toggleFlipHForFeatured`, `toggleFlipVForFeatured`.
+- New abstract strings on `HaptPickerStrings`: `editorToolAdjust`,
+  `editorActionRotate / FlipH / FlipV`, `editorFilterIntensity`,
+  `editorAdjustBrightness / Contrast / Saturation / Exposure`,
+  `editorAdjustReset`. English defaults shipped.
+
+### Changed
+
+- **Rotate button moved out of the canvas overlay** into the
+  Crop tab's action row. Same affordance, but the canvas surface
+  is now gesture-clean (no floating button to compete with pan/
+  zoom). The 3 action buttons (Rotate / Flip H / Flip V) live
+  side-by-side in a single row above the ratio chips.
+- `_EditorTool` enum grows from `{ crop, filter }` to
+  `{ crop, filter, adjust }`. Tab strip auto-sizes — Filter tab
+  hides when the consumer config exposes < 2 filters; Crop and
+  Adjust always render.
+
+### Known gaps (planned for 0.7)
+
+- **Straighten slider** (fine-grain rotation by 1° increments).
+  Deferred because the `image` package's non-90° `copyRotate`
+  produces a larger canvas with corner padding — needs an
+  auto-crop to the largest interior rect for the export, and we
+  want to ship that with proper math, not a hack.
+- Burst-aware selection grouping
+- Live filter preview in the asset grid (not just the crop preview)
+
 ## 0.5.0 — 2026-05-17
 
 Two production-test bugs / gaps.

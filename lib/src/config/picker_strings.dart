@@ -83,14 +83,36 @@ abstract class HaptPickerStrings {
   String filterLabel(String id);
 
   /// Editor tool-tab labels. The picker renders an explicit tool
-  /// strip below the crop canvas — "Crop" reveals aspect-ratio +
-  /// rotate, "Filter" reveals the filter preview chips. Apps with
-  /// only one tool enabled in their `HaptPickerConfig` (e.g. a
-  /// gallery picker that doesn't expose filters) won't see these
-  /// strings rendered, but they're still required so missing
-  /// overrides fail at compile time.
+  /// strip below the crop canvas — Crop reveals aspect-ratio +
+  /// rotate + flip, Filter reveals the filter preview chips +
+  /// intensity slider, Adjust reveals brightness / contrast /
+  /// saturation / exposure sliders.
   String get editorToolCrop;
   String get editorToolFilter;
+  String get editorToolAdjust;
+
+  /// Tooltip / a11y label for the rotate-clockwise button in the
+  /// Crop tab.
+  String get editorActionRotate;
+
+  /// Tooltip / a11y label for the flip-horizontal button.
+  String get editorActionFlipH;
+
+  /// Tooltip / a11y label for the flip-vertical button.
+  String get editorActionFlipV;
+
+  /// Slider label for filter intensity (0–100%).
+  String get editorFilterIntensity;
+
+  /// 4 slider labels for the Adjust tab.
+  String get editorAdjustBrightness;
+  String get editorAdjustContrast;
+  String get editorAdjustSaturation;
+  String get editorAdjustExposure;
+
+  /// Reset button on the Adjust tab — sets all 4 sliders back to
+  /// their identity values.
+  String get editorAdjustReset;
 
   /// "Selected N of M" — read out by screen readers when the user
   /// taps a thumbnail.
@@ -155,6 +177,26 @@ class HaptPickerStringsEn extends HaptPickerStrings {
   String get editorToolCrop => 'Crop';
   @override
   String get editorToolFilter => 'Filter';
+  @override
+  String get editorToolAdjust => 'Adjust';
+  @override
+  String get editorActionRotate => 'Rotate';
+  @override
+  String get editorActionFlipH => 'Flip horizontal';
+  @override
+  String get editorActionFlipV => 'Flip vertical';
+  @override
+  String get editorFilterIntensity => 'Intensity';
+  @override
+  String get editorAdjustBrightness => 'Brightness';
+  @override
+  String get editorAdjustContrast => 'Contrast';
+  @override
+  String get editorAdjustSaturation => 'Saturation';
+  @override
+  String get editorAdjustExposure => 'Exposure';
+  @override
+  String get editorAdjustReset => 'Reset';
   @override
   String selectionAnnouncement(int n, int max) =>
       'Selected $n of $max';
