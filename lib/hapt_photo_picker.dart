@@ -33,17 +33,7 @@ export 'src/config/picker_theme.dart'
         HaptPickerRadii,
         HaptPickerShadows;
 export 'src/config/picker_strings.dart'
-    show
-        HaptPickerStrings,
-        HaptPickerStringsEn,
-        HaptPickerStringsVi,
-        HaptPickerStringsEs,
-        HaptPickerStringsFr,
-        HaptPickerStringsDe,
-        HaptPickerStringsPt,
-        HaptPickerStringsJa,
-        HaptPickerStringsKo,
-        HaptPickerStringsAr;
+    show HaptPickerStrings, HaptPickerStringsEn;
 export 'src/data/asset.dart' show HaptAsset, HaptAssetKind;
 export 'src/data/album.dart' show HaptAlbum;
 export 'src/controller/picker_controller.dart'

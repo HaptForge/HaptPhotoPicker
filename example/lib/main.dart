@@ -59,7 +59,7 @@ class _HomeState extends State<_Home> {
       context,
       config: const HaptPickerConfig(maxSelection: 3),
       theme: winePalette,
-      strings: const HaptPickerStringsVi(),
+      strings: const HaptPickerStringsEn(),
       pipeline: const [_LogTransform()],
     );
     if (r != null) setState(() => _picked = r);

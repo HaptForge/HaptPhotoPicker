@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.4.0 — 2026-05-16
+
+Scope correction on the strings surface.
+
+### Breaking
+
+- **Removed the 8 non-English locale subclasses** (`HaptPickerStringsVi`,
+  `Es`, `Fr`, `De`, `Pt`, `Ja`, `Ko`, `Ar`). Localization is the
+  consumer's responsibility — most apps already have a JSON / ARB /
+  intl pipeline, and the library wedging its own set of translations
+  into that creates a second source of truth that drifts. The
+  override surface (every string is a getter on
+  `HaptPickerStrings`) is unchanged — apps now wire the picker
+  strings from their own l10n layer.
+- **Migration**: replace any `HaptPickerStringsVi()` etc. with your
+  own subclass that pulls every getter from your app's translations:
+  ```dart
+  class MyPickerStrings extends HaptPickerStrings {
+    MyPickerStrings(this.s);
+    final AppStrings s;
+    @override String get pickerTitle => s.pickerTitle;
+    // …override every getter.
+  }
+  ```
+
+### Kept
+
+- `HaptPickerStrings` (abstract base — no defaults, missed
+  overrides fail at compile time).
+- `HaptPickerStringsEn` (English defaults — usable as-is for
+  English, or subclass to tweak a line or two).
+
 ## 0.3.0 — 2026-05-16
 
 Correctness pass on the editing primitives + the v0.2 "Known gaps"
