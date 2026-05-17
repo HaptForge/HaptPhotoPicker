@@ -97,8 +97,16 @@ class _Thumbnail extends StatelessWidget {
     final t = theme;
     final selectedIndex = controller.selectionIndex(asset);
     final selected = selectedIndex != null;
+    // Single-pick is ALWAYS atMax (max=1 + auto-select on load) but
+    // its `toggle` handles the case via tap-to-replace — so we must
+    // NOT disable other thumbnails just because the slot is full.
+    // Only gate on `atMax` when there are multiple slots to fill
+    // (the original case where users need to deselect first to
+    // make room).
     final disabled = !_resolutionOk ||
-        (!selected && controller.atMax);
+        (!selected &&
+            controller.atMax &&
+            controller.config.maxSelection > 1);
     final isVideo = asset.kind == HaptAssetKind.video;
 
     return Semantics(

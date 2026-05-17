@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.1 — 2026-05-18
+
+Two follow-up fixes to 0.7.0 surfaced by real-device QA.
+
+### Fixed
+
+- **Single-pick mode could lock out tap-to-replace.** When the
+  auto-select bootstrap shipped in 0.7.0 ran, the picker became
+  permanently `atMax` (1/1 selected) — and the grid cell's
+  `disabled` flag treated that as "no more slots open" for every
+  other thumbnail, so users couldn't tap a different photo. The
+  grid now only gates on `atMax` when `maxSelection > 1`; in
+  single-pick mode the cell stays tappable and `toggle` handles
+  the swap via its existing tap-to-replace branch.
+
+### Changed
+
+- **Crop tool panel drill-down rewrite.** 0.7.0 stacked all four
+  Crop affordances (Rotate / Flip H / Flip V / Straighten dial /
+  aspect chips) in the same view, which pushed the asset grid
+  below it off-screen on smaller phones — exactly the opposite of
+  Apple's "general → specific" pattern.
+
+  The Crop panel now has a single 36 px toolbar with five icon
+  buttons:
+  - **Aspect** (toggle) — opens the aspect-ratio chips below
+  - **Straighten** (toggle) — opens the fine-rotation dial below
+  - **Rotate 90°** (action) — fires on tap, no detail surface
+  - **Flip H** (action) — fires on tap
+  - **Flip V** (action) — fires on tap
+
+  Only ONE detail surface is visible at a time (chips OR dial),
+  so the panel stays the same height regardless of which tool the
+  user has open. The asset grid keeps its real estate.
+
 ## 0.7.0 — 2026-05-18
 
 Three quality-of-life fixes that smooth out the editor + gallery

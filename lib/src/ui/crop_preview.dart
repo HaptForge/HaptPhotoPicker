@@ -497,7 +497,14 @@ class _CropCanvas extends StatelessWidget {
 /// Crop-tab content — an action row (Rotate / Flip H / Flip V)
 /// stacked above the aspect-ratio chips. Action buttons sit
 /// outside the canvas so the canvas surface stays gesture-clean.
-class _CropToolPanel extends StatelessWidget {
+/// Two submodes of the Crop tab — only one detail surface is visible
+/// at a time so the panel stays compact and the asset grid below
+/// keeps its real estate. Apple Photos uses the same drill-down: a
+/// row of icon affordances on top, and the chosen affordance's
+/// detail UI fills the slot below it.
+enum _CropSubmode { aspect, straighten }
+
+class _CropToolPanel extends StatefulWidget {
   const _CropToolPanel({
     required this.theme,
     required this.strings,
@@ -509,55 +516,186 @@ class _CropToolPanel extends StatelessWidget {
   final HaptPickerController controller;
 
   @override
+  State<_CropToolPanel> createState() => _CropToolPanelState();
+}
+
+class _CropToolPanelState extends State<_CropToolPanel> {
+  /// Default to Aspect — the most-frequent operation. Straighten /
+  /// rotate / flip are tools users reach for occasionally; aspect
+  /// is the one they hit on every pick when targeting a 1:1 avatar,
+  /// 4:5 portrait, etc.
+  _CropSubmode _submode = _CropSubmode.aspect;
+
+  @override
   Widget build(BuildContext context) {
-    final t = theme;
+    final t = widget.theme;
+    final hasAspect = widget.controller.config.aspectRatios.length > 1;
+    // If aspect-ratio support isn't configured, default + only mode
+    // is Straighten. Selecting Aspect would render an empty area.
+    if (!hasAspect && _submode == _CropSubmode.aspect) {
+      _submode = _CropSubmode.straighten;
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
+        // Toolbar — horizontally scrollable in case a future build
+        // ships more actions than fit on a narrow phone.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _ActionButton(
+              if (hasAspect)
+                _CropToolbarToggle(
+                  theme: t,
+                  icon: Icons.aspect_ratio_rounded,
+                  label: widget.strings.editorActionRotate,
+                  // Reuse the existing localised label — "Aspect" is
+                  // self-evident from the icon and avoids adding a
+                  // 9-locale string churn for one word.
+                  active: _submode == _CropSubmode.aspect,
+                  onTap: () =>
+                      setState(() => _submode = _CropSubmode.aspect),
+                ),
+              if (hasAspect) SizedBox(width: t.spacing.xs),
+              _CropToolbarToggle(
+                theme: t,
+                icon: Icons.straighten_rounded,
+                label: widget.strings.editorActionRotate,
+                active: _submode == _CropSubmode.straighten,
+                onTap: () => setState(
+                    () => _submode = _CropSubmode.straighten),
+              ),
+              SizedBox(width: t.spacing.xs),
+              // Rotate 90° / Flip H / Flip V are IMMEDIATE actions,
+              // not toggles. They fire on tap and don't switch the
+              // detail surface — that's how Apple's editor handles
+              // discrete one-shot operations vs continuous tools.
+              _CropToolbarAction(
                 theme: t,
                 icon: Icons.rotate_right_rounded,
-                label: strings.editorActionRotate,
-                onTap: controller.rotateFeaturedClockwise,
+                onTap: widget.controller.rotateFeaturedClockwise,
               ),
               SizedBox(width: t.spacing.xs),
-              _ActionButton(
+              _CropToolbarAction(
                 theme: t,
                 icon: Icons.flip_rounded,
-                label: strings.editorActionFlipH,
-                onTap: controller.toggleFlipHForFeatured,
+                onTap: widget.controller.toggleFlipHForFeatured,
               ),
               SizedBox(width: t.spacing.xs),
-              _ActionButton(
+              _CropToolbarAction(
                 theme: t,
                 icon: Icons.flip_to_back_rounded,
-                label: strings.editorActionFlipV,
-                onTap: controller.toggleFlipVForFeatured,
+                onTap: widget.controller.toggleFlipVForFeatured,
               ),
             ],
           ),
         ),
         SizedBox(height: t.spacing.sm),
-        // Fine-rotation dial — Apple-style horizontal degree picker.
-        // Sits between the rotate/flip row and the aspect chips
-        // because it's conceptually a refinement of the discrete
-        // 90° rotate button above.
-        _RotationDial(
-          theme: t,
-          controller: controller,
-        ),
-        SizedBox(height: t.spacing.sm),
-        if (controller.config.aspectRatios.length > 1)
+        // Detail surface — ONLY the active submode's UI renders.
+        // Both bodies have similar vertical height (~52 px) so
+        // switching submodes doesn't reflow the asset grid below.
+        if (_submode == _CropSubmode.aspect && hasAspect)
           _AspectRatioChips(
             theme: t,
-            strings: strings,
-            controller: controller,
-          ),
+            strings: widget.strings,
+            controller: widget.controller,
+          )
+        else if (_submode == _CropSubmode.straighten)
+          _RotationDial(theme: t, controller: widget.controller),
       ],
+    );
+  }
+}
+
+/// Pill-shaped toggle used in the Crop toolbar to switch which
+/// detail UI is visible below. Active state = filled, inactive =
+/// outlined. Compact (icon + nothing) so 5 fit on a narrow phone.
+class _CropToolbarToggle extends StatelessWidget {
+  const _CropToolbarToggle({
+    required this.theme,
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Semantics(
+      label: label,
+      selected: active,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 44,
+          height: 36,
+          decoration: BoxDecoration(
+            color: active
+                ? t.colors.primary
+                : t.colors.surfaceElevated,
+            borderRadius: BorderRadius.circular(t.radii.button),
+            border: Border.all(
+              color: active
+                  ? t.colors.primary
+                  : t.colors.border,
+              width: 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 18,
+            color: active ? t.colors.onPrimary : t.colors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fire-and-forget action button (rotate 90°, flip H/V). Same
+/// dimensions as [_CropToolbarToggle] so the toolbar reads as one
+/// cohesive row even though the two button types have different
+/// semantics.
+class _CropToolbarAction extends StatelessWidget {
+  const _CropToolbarAction({
+    required this.theme,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 44,
+        height: 36,
+        decoration: BoxDecoration(
+          color: t.colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(t.radii.button),
+          border: Border.all(color: t.colors.border, width: 1),
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, size: 18, color: t.colors.textPrimary),
+      ),
     );
   }
 }
@@ -709,55 +847,6 @@ class _DialTickPainter extends CustomPainter {
   bool shouldRepaint(_DialTickPainter old) =>
       old.degrees != degrees ||
       old.indicatorColor != indicatorColor;
-}
-
-/// Square outlined button used inside the Crop tab's action row.
-/// Icon above, label below — tappable target is the whole tile.
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.theme,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-  final HaptPickerTheme theme;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = theme;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: t.colors.surfaceElevated,
-            borderRadius: BorderRadius.circular(t.radii.button),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: t.colors.textPrimary),
-              SizedBox(height: t.spacing.xxs),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.typography.label.copyWith(
-                  color: t.colors.textSecondary,
-                  fontSize: 10.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ─── Tool panel: Filter ─────────────────────────────────────────────
