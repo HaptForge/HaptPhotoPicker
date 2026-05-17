@@ -20,6 +20,12 @@ pubspec.lock
 .DS_Store
 Thumbs.db
 
+# Maintainer-only helper — release / publish commands. Lives in the
+# repo for the author's convenience but isn't part of the public
+# package surface, so we don't ship it via pub.dev or expose its
+# release contract to contributors who don't have push rights.
+Makefile
+
 # Generated docs
 doc/api/
 
