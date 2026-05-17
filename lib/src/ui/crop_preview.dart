@@ -34,23 +34,45 @@ class CropPreview extends StatefulWidget {
     required this.theme,
     required this.strings,
     required this.controller,
+    this.showToolSurface = true,
+    this.maxHeightFraction = 0.42,
   });
 
   final HaptPickerTheme theme;
   final HaptPickerStrings strings;
   final HaptPickerController controller;
 
+  /// When false, only the image canvas renders — no tabs, no aspect
+  /// chips, no rotate / flip / dial. Set to false when the parent
+  /// (`HaptPickerSheet`) drives a full-screen drill-in editor and
+  /// owns the tool surface itself. Default true preserves the
+  /// pre-0.8 single-screen layout for consumers using the picker
+  /// outside the bundled sheet.
+  final bool showToolSurface;
+
+  /// What share of the screen height the preview canvas may occupy.
+  /// Default 0.42 fits comfortably above the tool surface + asset
+  /// grid. In drill-in mode the picker bumps this to ~0.7 so the
+  /// preview grows when the grid is hidden.
+  final double maxHeightFraction;
+
   @override
   State<CropPreview> createState() => _CropPreviewState();
 }
 
-/// Which editor tool panel is currently visible. Three tabs map to
-/// the three things every consumer photo editor exposes:
+/// Which editor tool panel is currently visible. Drill-in pattern:
+/// tapping a launcher in the picker pushes a tool-specific screen
+/// that fills the same vertical real estate the asset grid had.
 ///
-///   - `crop`   — aspect ratio + rotate / flip transforms
+///   - `crop`   — aspect ratio chips only
 ///   - `filter` — preset color grades + intensity slider
+///   - `rotate` — discrete 90° rotate + flip H/V + fine-rotation dial
 ///   - `adjust` — manual brightness / contrast / saturation / exposure
-enum _EditorTool { crop, filter, adjust }
+enum EditorTool { crop, filter, rotate, adjust }
+
+/// Legacy alias for callers still using the v0.7 internal tool enum.
+/// Kept as a private typedef so the public surface stays clean.
+typedef _EditorTool = EditorTool;
 
 class _CropPreviewState extends State<CropPreview> {
   final TransformationController _transform = TransformationController();
@@ -119,10 +141,11 @@ class _CropPreviewState extends State<CropPreview> {
             : featured.width /
                 (featured.height == 0 ? 1 : featured.height));
 
-    // Cap preview to 42% of viewport — leaves room for the chips
-    // + grid below on smaller phones.
+    // Cap preview height by the fraction the caller chose. 0.42 in
+    // gallery mode (room for tool buttons + asset grid); ~0.7 in
+    // drill-in mode (no grid below; let the preview breathe).
     final media = MediaQuery.of(context);
-    final maxHeight = media.size.height * 0.42;
+    final maxHeight = media.size.height * widget.maxHeightFraction;
 
     // Build the composed filter live so the preview shows preset +
     // intensity + adjustments combined. Keeps the on-screen image
@@ -179,20 +202,13 @@ class _CropPreviewState extends State<CropPreview> {
             ),
           ),
         ),
-        SizedBox(height: t.spacing.xs),
-        // Tool surface — three tabs: Crop / Filter / Adjust.
-        //
-        // - Crop: always available (ratio chips + Rotate / Flip H /
-        //   Flip V). If the config only ships one aspect ratio, the
-        //   chips collapse to nothing but the action row stays.
-        // - Filter: shown only when the config exposes ≥ 2 filters.
-        // - Adjust: always available (manual sliders work on any
-        //   image regardless of preset filters).
-        //
-        // Tabs render only when there are at least 2 visible panels;
-        // otherwise we degrade to the single available panel
-        // unchanged so the minimal-config case stays minimal.
-        _buildToolSurface(t, featured, state, filters),
+        if (widget.showToolSurface) ...[
+          SizedBox(height: t.spacing.xs),
+          // Legacy in-preview tool tabs. Off by default when the
+          // parent uses drill-in mode (the picker sheet renders its
+          // own launcher row + dedicated tool screens).
+          _buildToolSurface(t, featured, state, filters),
+        ],
       ],
     );
   }
@@ -321,6 +337,7 @@ class _EditorToolTabs extends StatelessWidget {
   IconData _iconFor(_EditorTool tool) => switch (tool) {
         _EditorTool.crop => Icons.crop_rounded,
         _EditorTool.filter => Icons.auto_awesome_rounded,
+        _EditorTool.rotate => Icons.rotate_right_rounded,
         _EditorTool.adjust => Icons.tune_rounded,
       };
 
@@ -328,6 +345,7 @@ class _EditorToolTabs extends StatelessWidget {
       switch (tool) {
         _EditorTool.crop => s.editorToolCrop,
         _EditorTool.filter => s.editorToolFilter,
+        _EditorTool.rotate => s.editorActionRotate,
         _EditorTool.adjust => s.editorToolAdjust,
       };
 }
@@ -1413,6 +1431,292 @@ class _AssetThumbState extends State<_AssetThumb> {
           gaplessPlayback: true,
         );
       },
+    );
+  }
+}
+
+// ─── Public tool view ────────────────────────────────────────────────
+
+/// Dispatcher widget that renders the controls for one [EditorTool].
+/// Drives the bottom half of each drill-in tool screen in
+/// `HaptPickerSheet`. The host owns the chrome (back button, Done
+/// button) and the bigger image preview above; this widget just
+/// renders the tool-specific controls.
+///
+/// For consumers using `CropPreview` outside the bundled sheet, the
+/// legacy in-preview tab strip still renders by default; this
+/// dispatcher is the v0.8+ drill-in path.
+class EditorToolView extends StatelessWidget {
+  const EditorToolView({
+    super.key,
+    required this.tool,
+    required this.theme,
+    required this.strings,
+    required this.controller,
+  });
+
+  final EditorTool tool;
+  final HaptPickerTheme theme;
+  final HaptPickerStrings strings;
+  final HaptPickerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final featured = controller.featuredAsset;
+    if (featured == null) return const SizedBox.shrink();
+    final state = controller.cropFor(featured);
+    final filters = controller.config.filters;
+    final hasAspect = controller.config.aspectRatios.length > 1;
+    switch (tool) {
+      case EditorTool.crop:
+        return hasAspect
+            ? _AspectRatioChips(
+                theme: theme,
+                strings: strings,
+                controller: controller,
+              )
+            : const SizedBox.shrink();
+      case EditorTool.filter:
+        if (filters.length < 2) return const SizedBox.shrink();
+        return _FilterToolPanel(
+          theme: theme,
+          strings: strings,
+          controller: controller,
+          asset: featured,
+          state: state,
+          filters: filters,
+        );
+      case EditorTool.rotate:
+        return _RotateToolPanel(
+          theme: theme,
+          strings: strings,
+          controller: controller,
+        );
+      case EditorTool.adjust:
+        return _AdjustToolPanel(
+          theme: theme,
+          strings: strings,
+          controller: controller,
+          adjustments: state.adjustments,
+        );
+    }
+  }
+}
+
+/// Rotate tool — three discrete actions (90°, flip H, flip V) above
+/// the fine-rotation dial. Lays out roomier than the old crop-tab
+/// did because it has its own full drill-in screen instead of
+/// sharing space with aspect chips.
+class _RotateToolPanel extends StatelessWidget {
+  const _RotateToolPanel({
+    required this.theme,
+    required this.strings,
+    required this.controller,
+  });
+
+  final HaptPickerTheme theme;
+  final HaptPickerStrings strings;
+  final HaptPickerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Action row — pill buttons evenly spaced, big enough to
+        // tap comfortably with the thumb. No detail surface (these
+        // are one-shot actions).
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
+          child: Row(
+            children: [
+              Expanded(
+                child: _RotateActionPill(
+                  theme: t,
+                  icon: Icons.rotate_right_rounded,
+                  label: strings.editorActionRotate,
+                  onTap: controller.rotateFeaturedClockwise,
+                ),
+              ),
+              SizedBox(width: t.spacing.sm),
+              Expanded(
+                child: _RotateActionPill(
+                  theme: t,
+                  icon: Icons.flip_rounded,
+                  label: strings.editorActionFlipH,
+                  onTap: controller.toggleFlipHForFeatured,
+                ),
+              ),
+              SizedBox(width: t.spacing.sm),
+              Expanded(
+                child: _RotateActionPill(
+                  theme: t,
+                  icon: Icons.flip_to_back_rounded,
+                  label: strings.editorActionFlipV,
+                  onTap: controller.toggleFlipVForFeatured,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: t.spacing.md),
+        _RotationDial(theme: t, controller: controller),
+      ],
+    );
+  }
+}
+
+class _RotateActionPill extends StatelessWidget {
+  const _RotateActionPill({
+    required this.theme,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: t.colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(t.radii.button),
+          border: Border.all(color: t.colors.border, width: 1),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: t.colors.textPrimary),
+            SizedBox(height: t.spacing.xxs),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.typography.label.copyWith(
+                color: t.colors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact icon button row used in `HaptPickerSheet`'s gallery mode
+/// to launch a drill-in tool screen. One pill per [EditorTool] the
+/// config exposes; tapping pushes the corresponding tool view.
+class EditorToolLauncher extends StatelessWidget {
+  const EditorToolLauncher({
+    super.key,
+    required this.theme,
+    required this.strings,
+    required this.controller,
+    required this.onLaunch,
+  });
+
+  final HaptPickerTheme theme;
+  final HaptPickerStrings strings;
+  final HaptPickerController controller;
+  final ValueChanged<EditorTool> onLaunch;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    final filtersAvailable = controller.config.filters.length >= 2;
+    final aspectAvailable = controller.config.aspectRatios.length > 1;
+    final tools = <(EditorTool, IconData, String)>[
+      if (aspectAvailable)
+        (EditorTool.crop, Icons.crop_rounded, strings.editorToolCrop),
+      if (filtersAvailable)
+        (EditorTool.filter, Icons.auto_awesome_rounded,
+            strings.editorToolFilter),
+      (EditorTool.rotate, Icons.rotate_right_rounded,
+          strings.editorActionRotate),
+      (EditorTool.adjust, Icons.tune_rounded, strings.editorToolAdjust),
+    ];
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: t.spacing.md,
+        vertical: t.spacing.xs,
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < tools.length; i++) ...[
+            if (i > 0) SizedBox(width: t.spacing.sm),
+            Expanded(
+              child: _LauncherTile(
+                theme: t,
+                icon: tools[i].$2,
+                label: tools[i].$3,
+                onTap: () => onLaunch(tools[i].$1),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LauncherTile extends StatelessWidget {
+  const _LauncherTile({
+    required this.theme,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final HaptPickerTheme theme;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: t.colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(t.radii.button),
+          border: Border.all(color: t.colors.border, width: 1),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: t.colors.textPrimary),
+            SizedBox(height: t.spacing.xxs),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.typography.label.copyWith(
+                color: t.colors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

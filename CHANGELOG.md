@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.8.0 — 2026-05-18
+
+Photo-editor-style drill-in architecture. The editor was outgrowing
+its one-screen-fits-all tab layout — every new affordance (fine
+rotation, filter intensity, manual adjustments) stacked on top of
+the others and crowded the asset grid off the bottom of the sheet.
+v0.8 rebuilds the editor around Apple's "general → specific"
+pattern: a launcher row of tools below the preview, and each tool
+opens into its own full-screen view with all the breathing room it
+needs.
+
+### Added
+
+- **`EditorTool` enum** (`crop`, `filter`, `rotate`, `adjust`) — the
+  four primary tools the picker exposes. Previously these were
+  three internal tabs (rotate/flip lived inside crop); v0.8 splits
+  rotation into its own tool so the dial + 90°-rotate + flip H/V
+  controls share a dedicated screen.
+- **`EditorToolLauncher` widget** — horizontal row of pill buttons,
+  one per tool the consumer's config exposes. Tapping a pill drills
+  into the matching tool screen.
+- **`EditorToolView` widget** — dispatcher that renders the controls
+  for a given `EditorTool`. Used inside `HaptPickerSheet`'s drill-in
+  flow; consumers building custom layouts can reuse it.
+- **`CropPreview.showToolSurface` parameter** (default `true`) — set
+  to `false` to suppress the legacy in-preview tab strip when you're
+  driving the tool surface yourself. The bundled sheet now sets this
+  to `false`.
+- **`CropPreview.maxHeightFraction` parameter** (default `0.42`) —
+  lets the parent grow the preview when there's no asset grid below
+  it. The sheet bumps to `0.55` in tool mode.
+
+### Changed
+
+- **`HaptPickerSheet` is now two-mode.** Gallery mode is the
+  existing layout (chrome → preview → asset grid) plus the new
+  launcher row between preview and grid. Tool mode is entered by
+  tapping a launcher: chrome shows a back arrow + tool name +
+  Done, the preview grows, the grid is hidden, and the active
+  tool's controls fill the remaining space. The internal Done
+  button in tool mode just exits the tool — final picker-level Done
+  still lives in gallery mode and runs the export pipeline. No
+  consumer API changes needed; the migration is purely internal.
+
+### Rationale
+
+The drill-in pattern lets us add new tools (or new affordances
+inside existing tools) without competing for the same real estate.
+Tools that need a wide control surface (filter strip, adjustment
+sliders, future Markup / Annotate features) now have it without
+trading off against the asset grid.
+
 ## 0.7.1 — 2026-05-18
 
 Two follow-up fixes to 0.7.0 surfaced by real-device QA.

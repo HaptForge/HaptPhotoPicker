@@ -228,7 +228,7 @@ class _PermissionGate {
       _PermissionGate._(granted: false, state: s);
 }
 
-class _ListenableScaffold extends StatelessWidget {
+class _ListenableScaffold extends StatefulWidget {
   const _ListenableScaffold({
     required this.controller,
     required this.theme,
@@ -244,34 +244,228 @@ class _ListenableScaffold extends StatelessWidget {
   final VoidCallback onCancel;
 
   @override
+  State<_ListenableScaffold> createState() => _ListenableScaffoldState();
+}
+
+class _ListenableScaffoldState extends State<_ListenableScaffold> {
+  /// Active tool screen. `null` = gallery mode (chrome + preview +
+  /// launcher row + asset grid). Non-null = drill-in mode (chrome
+  /// with Back button + bigger preview + tool controls + Done bar;
+  /// asset grid hidden).
+  EditorTool? _activeTool;
+
+  void _enterTool(EditorTool t) => setState(() => _activeTool = t);
+  void _exitTool() => setState(() => _activeTool = null);
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (_, __) {
-        return Column(
-          children: [
-            PickerChrome(
-              theme: theme,
-              strings: strings,
-              controller: controller,
-              onCancel: onCancel,
-              onDone: onDone,
+        return _activeTool == null
+            ? _buildGalleryMode()
+            : _buildToolMode(_activeTool!);
+      },
+    );
+  }
+
+  Widget _buildGalleryMode() {
+    final t = widget.theme;
+    return Column(
+      children: [
+        PickerChrome(
+          theme: t,
+          strings: widget.strings,
+          controller: widget.controller,
+          onCancel: widget.onCancel,
+          onDone: widget.onDone,
+        ),
+        CropPreview(
+          theme: t,
+          strings: widget.strings,
+          controller: widget.controller,
+          // Hide the legacy in-preview tabs — gallery mode now uses
+          // a dedicated launcher row below the preview that pushes
+          // each tool into its own drill-in screen.
+          showToolSurface: false,
+        ),
+        SizedBox(height: t.spacing.xs),
+        EditorToolLauncher(
+          theme: t,
+          strings: widget.strings,
+          controller: widget.controller,
+          onLaunch: _enterTool,
+        ),
+        SizedBox(height: t.spacing.xs),
+        Expanded(
+          child: AssetGrid(
+            theme: t,
+            strings: widget.strings,
+            controller: widget.controller,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolMode(EditorTool tool) {
+    final t = widget.theme;
+    return Column(
+      children: [
+        // Tool chrome: back arrow on left, tool name in centre,
+        // Done on right. Done in tool mode just exits the tool
+        // (commits are already in the controller's state) — the
+        // final picker-level Done lives in gallery mode and runs
+        // the export pipeline.
+        _ToolChrome(
+          theme: t,
+          title: _toolTitle(tool),
+          doneLabel: widget.strings.doneLabelEmpty,
+          onBack: _exitTool,
+          onDone: _exitTool,
+        ),
+        // Bigger preview — no asset grid below, so we let it
+        // breathe. 0.55 fits comfortably above the controls on a
+        // standard iPhone 14 vs the 0.42 of gallery mode.
+        CropPreview(
+          theme: t,
+          strings: widget.strings,
+          controller: widget.controller,
+          showToolSurface: false,
+          maxHeightFraction: 0.55,
+        ),
+        // Tool's controls fill the remaining vertical space.
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(top: t.spacing.md),
+            child: EditorToolView(
+              tool: tool,
+              theme: t,
+              strings: widget.strings,
+              controller: widget.controller,
             ),
-            CropPreview(
-              theme: theme,
-              strings: strings,
-              controller: controller,
-            ),
-            Expanded(
-              child: AssetGrid(
-                theme: theme,
-                strings: strings,
-                controller: controller,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _toolTitle(EditorTool tool) {
+    final s = widget.strings;
+    switch (tool) {
+      case EditorTool.crop:
+        return s.editorToolCrop;
+      case EditorTool.filter:
+        return s.editorToolFilter;
+      case EditorTool.rotate:
+        return s.editorActionRotate;
+      case EditorTool.adjust:
+        return s.editorToolAdjust;
+    }
+  }
+}
+
+/// Chrome for a drill-in tool screen: back arrow → exits the tool,
+/// tool name centred, Done → also exits the tool. Mirrors the
+/// gallery-mode `PickerChrome` so the back/forward transition feels
+/// like the same surface flipping pages, not a stack push.
+class _ToolChrome extends StatelessWidget {
+  const _ToolChrome({
+    required this.theme,
+    required this.title,
+    required this.doneLabel,
+    required this.onBack,
+    required this.onDone,
+  });
+
+  final HaptPickerTheme theme;
+  final String title;
+  final String doneLabel;
+  final VoidCallback onBack;
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = theme;
+    const sideSlot = 92.0;
+    return Container(
+      decoration: BoxDecoration(
+        color: t.colors.surfaceElevated,
+        border: Border(
+          bottom: BorderSide(
+            color: t.colors.border.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          t.spacing.md, t.spacing.sm, t.spacing.md, t.spacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: sideSlot,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(t.radii.button),
+                  onTap: onBack,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: t.spacing.xs,
+                        vertical: t.spacing.xs),
+                    child: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: t.colors.textPrimary,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.typography.button.copyWith(
+                  color: t.colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: sideSlot,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(t.radii.button),
+                  onTap: onDone,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: t.spacing.md,
+                        vertical: t.spacing.xs),
+                    child: Text(
+                      doneLabel,
+                      style: t.typography.button.copyWith(
+                        color: t.colors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
