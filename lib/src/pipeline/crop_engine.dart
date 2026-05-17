@@ -65,11 +65,16 @@ class HaptCropEngine {
     if (decoded == null) return null;
 
     // ─── Step 1: rotation ──────────────────────────────────────────
-    if (state.rotationQuarters != 0) {
-      decoded = img.copyRotate(
-        decoded,
-        angle: state.rotationQuarters * 90,
-      );
+    // Combine the discrete 90° step + the fine ±45° dial into one
+    // `copyRotate` so the output matches the preview exactly. The
+    // image package fills the bounding-box corners with transparent
+    // pixels when angle isn't a multiple of 90° — we accept that
+    // because Apple Photos does the same and re-cropping after a
+    // fine rotation is the canonical workflow anyway.
+    final totalAngle =
+        state.rotationQuarters * 90 + state.rotationFine;
+    if (totalAngle != 0) {
+      decoded = img.copyRotate(decoded, angle: totalAngle);
     }
 
     // ─── Step 1b: flip (horizontal / vertical) ─────────────────────

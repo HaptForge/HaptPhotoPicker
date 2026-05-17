@@ -248,18 +248,63 @@ class _DurationPill extends StatelessWidget {
   }
 }
 
-class _AssetThumb extends StatelessWidget {
+/// Grid thumbnail cell.
+///
+/// Stateful + keep-alive on purpose:
+///   - **Stateful** with a cached `Future` lets the same in-flight
+///     thumbnail decode survive parent rebuilds (selection-badge
+///     redraws, scroll position updates, theme switches). The
+///     previous StatelessWidget + inline `FutureBuilder` restarted
+///     the Future on every rebuild and re-decoded the same JPEG
+///     dozens of times per scroll, which is the primary cause of
+///     grid jank on long albums.
+///   - **AutomaticKeepAliveClientMixin** prevents the Sliver layer
+///     from disposing offscreen cells. Without it, scrolling away
+///     destroys decoded ImageProviders and scrolling back has to
+///     re-decode from scratch — wasted CPU + flicker on every
+///     direction change.
+///   - **didUpdateWidget** swaps the cached Future when the cell is
+///     recycled onto a different asset (GridView.builder reuses
+///     widget instances). Comparing by `asset.id` instead of
+///     identity matches photo_manager's stable-ID semantics.
+class _AssetThumb extends StatefulWidget {
   const _AssetThumb({required this.asset, required this.placeholder});
   final HaptAsset asset;
   final Color placeholder;
 
   @override
+  State<_AssetThumb> createState() => _AssetThumbState();
+}
+
+class _AssetThumbState extends State<_AssetThumb>
+    with AutomaticKeepAliveClientMixin<_AssetThumb> {
+  late Future<Uint8List?> _future;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.asset.readThumbnail(width: 280, height: 280);
+  }
+
+  @override
+  void didUpdateWidget(_AssetThumb old) {
+    super.didUpdateWidget(old);
+    if (old.asset.id != widget.asset.id) {
+      _future = widget.asset.readThumbnail(width: 280, height: 280);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return FutureBuilder<Uint8List?>(
-      future: asset.readThumbnail(width: 280, height: 280),
+      future: _future,
       builder: (_, snap) {
         final bytes = snap.data;
-        if (bytes == null) return Container(color: placeholder);
+        if (bytes == null) return Container(color: widget.placeholder);
         return Image.memory(
           bytes,
           fit: BoxFit.cover,

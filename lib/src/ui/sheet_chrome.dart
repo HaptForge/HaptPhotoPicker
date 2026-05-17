@@ -44,7 +44,24 @@ class PickerChrome extends StatelessWidget {
     // every selection tap reflows the entire chrome row. 92 px
     // covers "Done (4)" in every locale at the chosen button font.
     const sideSlot = 92.0;
-    return Padding(
+    // Header sits on `surfaceElevated` (one step lighter in dark
+    // mode, one step warmer in light) so it visually separates from
+    // the asset grid below. A 1px hairline at the bottom adds the
+    // final affordance — without it the elevated colour alone reads
+    // as a flat tint on most LCD screens. Both surfaces share the
+    // same `surface` token at the theme root (instagram-grade
+    // pickers historically merged them); the elevated token is
+    // applied locally to the chrome only.
+    return Container(
+      decoration: BoxDecoration(
+        color: t.colors.surfaceElevated,
+        border: Border(
+          bottom: BorderSide(
+            color: t.colors.border.withValues(alpha: 0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
       padding: EdgeInsets.fromLTRB(
           t.spacing.md, t.spacing.sm, t.spacing.md, t.spacing.xs),
       child: Row(
@@ -91,6 +108,7 @@ class PickerChrome extends StatelessWidget {
     );
   }
 }
+
 
 /// Small chrome-side text button (Cancel). Pulled out so we can use
 /// the `button` typography slot (15px) instead of the `label` slot

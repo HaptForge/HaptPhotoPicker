@@ -50,6 +50,20 @@ class HaptPickerController extends ChangeNotifier {
 
   set assets(List<HaptAsset> next) {
     _assets = next;
+    // Single-pick mode bootstrap: when the album finishes its first
+    // load (no asset list yet, nothing selected), seed the selection
+    // with the newest asset (index 0 — photo_manager returns
+    // newest-first). This implements the "no empty state in single-
+    // pick" rule: the picker always has exactly one selection from
+    // the moment it opens, so the Done button is enabled by default
+    // and the crop preview shows actual content instead of a
+    // placeholder. Multi-pick keeps the original "start empty"
+    // semantics — there's no equally-correct default for N picks.
+    if (config.maxSelection == 1 &&
+        _selection.isEmpty &&
+        next.isNotEmpty) {
+      _selection.add(next.first);
+    }
     notifyListeners();
   }
 
@@ -77,20 +91,29 @@ class HaptPickerController extends ChangeNotifier {
           _selection.length == config.maxSelection);
 
   /// Toggle an asset's selection state. Returns true if the
-  /// operation took effect; false if it was rejected (max reached).
+  /// operation took effect; false if it was rejected.
   ///
-  /// **Single-pick mode** (`maxSelection == 1`) behaves as
-  /// tap-to-replace: tapping a different thumbnail clears the
-  /// current pick and selects the new one in one move. Without
-  /// this, users had to deselect-then-select-again, which feels
-  /// like a bug in a single-pick context.
+  /// **Single-pick mode** (`maxSelection == 1`) is a true tap-to-
+  /// replace: the picker is NEVER in a zero-selection state. The
+  /// album auto-selects the newest asset on load (see `assets`
+  /// setter), tapping a different thumbnail swaps the selection in
+  /// one move, and tapping the currently-selected thumbnail is a
+  /// no-op (no deselect). The user always has exactly one pick.
+  /// Without this rule the Done button could go disabled mid-flow
+  /// just because the user double-tapped the wrong thumbnail.
   ///
-  /// **Multi-pick mode** keeps the original semantics: the second
-  /// "add" beyond [HaptPickerConfig.maxSelection] fails so the
-  /// user is explicitly told to deselect first — that's the right
+  /// **Multi-pick mode** keeps the original semantics: tapping a
+  /// selected thumbnail deselects it, the second "add" beyond
+  /// [HaptPickerConfig.maxSelection] fails so the user is
+  /// explicitly told to deselect first — that's the right
   /// affordance when the selection ORDER matters (badges show 1/2/3).
   bool toggle(HaptAsset a) {
     if (_selection.contains(a)) {
+      // Single-pick: tapping the already-selected asset is a no-op.
+      // We never let the picker drop to zero selections in this mode.
+      if (config.maxSelection == 1) {
+        return false;
+      }
       _selection.remove(a);
       haptics.fire(HaptHapticEvent.deselect);
       notifyListeners();
@@ -256,6 +279,27 @@ class HaptPickerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set the fine-grained rotation (degrees, [-45, 45]) on the
+  /// featured asset. Clamps + snaps to 0° within a 0.5° dead-zone so
+  /// the dial has a tactile centre. Fires a `tick` haptic on whole-
+  /// degree boundaries — same idiom Apple's photo editor uses to
+  /// give the dial physical feedback without spamming the motor on
+  /// every sub-degree touch update.
+  void setRotationFineForFeatured(double degrees) {
+    final a = featuredAsset;
+    if (a == null) return;
+    var clamped = degrees.clamp(-45.0, 45.0).toDouble();
+    if (clamped.abs() < 0.5) clamped = 0.0;
+    final cur = cropFor(a);
+    final crossedDegree = cur.rotationFine.round() != clamped.round();
+    _cropStates[a.id] = cur.copyWith(rotationFine: clamped);
+    // Reuse `snap` (selectionClick) for the per-degree tick feel —
+    // same idiom Apple's photo editor's dial uses. Avoids polluting
+    // the enum with a brand-new event for one widget.
+    if (crossedDegree) haptics.fire(HaptHapticEvent.snap);
+    notifyListeners();
+  }
+
   // ─── Preview viewport size ─────────────────────────────────────────
   //
   // The crop preview widget reports its laid-out viewport size here
@@ -296,6 +340,7 @@ class HaptCropState {
     this.adjustments = HaptFilter.original,
     this.flipH = false,
     this.flipV = false,
+    this.rotationFine = 0.0,
   });
 
   /// Uniform scale factor. 1.0 = no zoom. Clamped to
@@ -335,6 +380,13 @@ class HaptCropState {
   final bool flipH;
   final bool flipV;
 
+  /// Fine-grained user-driven rotation in DEGREES, layered on top of
+  /// [rotationQuarters]. Clamped to ±45° by the dial widget so users
+  /// who want a 90° turn use the discrete rotate button instead.
+  /// Engine applies the combined angle (`quarters * 90° +
+  /// rotationFine°`) during render. Default 0 = identity.
+  final double rotationFine;
+
   /// Untouched state — no zoom, centered, no rotation, no filter.
   /// The crop preview seeds with this every time the user switches
   /// to a new asset.
@@ -346,7 +398,8 @@ class HaptCropState {
         filterIntensity = 1.0,
         adjustments = HaptFilter.original,
         flipH = false,
-        flipV = false;
+        flipV = false,
+        rotationFine = 0.0;
 
   HaptCropState copyWith({
     double? scale,
@@ -357,6 +410,7 @@ class HaptCropState {
     HaptFilter? adjustments,
     bool? flipH,
     bool? flipV,
+    double? rotationFine,
   }) =>
       HaptCropState(
         scale: scale ?? this.scale,
@@ -367,5 +421,6 @@ class HaptCropState {
         adjustments: adjustments ?? this.adjustments,
         flipH: flipH ?? this.flipH,
         flipV: flipV ?? this.flipV,
+        rotationFine: rotationFine ?? this.rotationFine,
       );
 }

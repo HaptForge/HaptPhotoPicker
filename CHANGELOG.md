@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.7.0 — 2026-05-18
+
+Three quality-of-life fixes that smooth out the editor + gallery
+surface for production use.
+
+### Added
+
+- **Fine-grained rotation dial** in the Crop tool panel. Apple-style
+  horizontal tick rail with a centred indicator; drag left/right to
+  rotate the image up to ±45° in 1° increments. Per-degree haptic
+  tick + 0.5° dead-zone snap at centre lets users return to "no
+  rotation" by feel alone. Numeric readout shows the current angle.
+  New `HaptCropState.rotationFine` (double, default 0.0) carries the
+  value; the crop engine composes it with `rotationQuarters` into a
+  single `copyRotate` call on Done. Discrete 90° rotation via the
+  existing rotate button is unchanged.
+
+### Changed
+
+- **Single-pick mode is now zero-empty-state.** The picker auto-
+  selects the newest asset on first album load when
+  `maxSelection == 1`, so the Done button is enabled the moment the
+  sheet opens and the crop preview shows actual content instead of
+  a placeholder. Tapping a different thumbnail swaps the selection
+  (already existed); tapping the currently-selected thumbnail is
+  now a no-op (previously it deselected, leaving the picker in an
+  empty state — confusing in a single-pick context). Multi-pick
+  semantics are unchanged.
+- **Sheet chrome stands apart from the asset grid.** Header now sits
+  on the theme's `surfaceElevated` token + a 0.5 px bottom hairline,
+  so the Cancel / Album / Done row no longer merges visually into
+  the gallery. Both light and dark themes pick up the change
+  automatically; no consumer migration needed.
+- **Asset-grid thumbnails decode at most once per asset.** The grid
+  cell widget is now a `StatefulWidget` that caches its decode
+  `Future` for the lifetime of the cell + uses
+  `AutomaticKeepAliveClientMixin` so offscreen cells aren't disposed
+  and re-decoded on scroll-back. The previous `StatelessWidget +
+  inline FutureBuilder` re-fired the decode on every parent rebuild
+  (selection badge update, scroll, theme switch) — the primary
+  cause of grid jank on long albums.
+
 ## 0.6.0 — 2026-05-17
 
 Closes the "photo editor parity" gap — three new tools land in the

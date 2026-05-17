@@ -163,6 +163,7 @@ class _CropPreviewState extends State<CropPreview> {
                     theme: t,
                     asset: featured,
                     rotationQuarters: state.rotationQuarters,
+                    rotationFine: state.rotationFine,
                     flipH: state.flipH,
                     flipV: state.flipV,
                     filter: effectiveFilter,
@@ -393,6 +394,7 @@ class _CropCanvas extends StatelessWidget {
     required this.theme,
     required this.asset,
     required this.rotationQuarters,
+    required this.rotationFine,
     required this.flipH,
     required this.flipV,
     required this.filter,
@@ -405,6 +407,10 @@ class _CropCanvas extends StatelessWidget {
   final HaptPickerTheme theme;
   final HaptAsset? asset;
   final int rotationQuarters;
+
+  /// Fine-grained rotation in degrees (clamped ±45° by the controller).
+  /// Composed with [rotationQuarters] at render time.
+  final double rotationFine;
 
   /// Mirror flags. Applied as a `Transform.scale` on the asset
   /// subtree so the preview shows the mirrored image at zero CPU
@@ -465,7 +471,8 @@ class _CropCanvas extends StatelessWidget {
               onInteractionStart: (_) => onInteractionStart(),
               onInteractionEnd: (_) => onInteractionEnd(),
               child: Transform.rotate(
-                angle: rotationQuarters * math.pi / 2,
+                angle: rotationQuarters * math.pi / 2 +
+                    rotationFine * math.pi / 180,
                 child: assetTree,
               ),
             ),
@@ -535,6 +542,15 @@ class _CropToolPanel extends StatelessWidget {
           ),
         ),
         SizedBox(height: t.spacing.sm),
+        // Fine-rotation dial — Apple-style horizontal degree picker.
+        // Sits between the rotate/flip row and the aspect chips
+        // because it's conceptually a refinement of the discrete
+        // 90° rotate button above.
+        _RotationDial(
+          theme: t,
+          controller: controller,
+        ),
+        SizedBox(height: t.spacing.sm),
         if (controller.config.aspectRatios.length > 1)
           _AspectRatioChips(
             theme: t,
@@ -544,6 +560,155 @@ class _CropToolPanel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Horizontal degree dial — Apple Photos-style.
+///
+/// Drag-to-rotate gesture maps horizontal pixel deltas onto a ±45°
+/// range. A tick rail underneath shows whole-degree ticks every 1°
+/// with major ticks every 5°. Centred 0° has a strong dead-zone
+/// snap (controller enforces 0.5° dead-band) so users can return to
+/// "no rotation" by feel alone. Numeric readout above the rail
+/// shows the current angle to 1 decimal.
+///
+/// Idiom matches the Crop / Straighten dial in Apple's iOS Photos
+/// editor (the screenshot the user referenced): single thumb-like
+/// indicator line at centre, ticks moving past it as you drag.
+class _RotationDial extends StatefulWidget {
+  const _RotationDial({required this.theme, required this.controller});
+
+  final HaptPickerTheme theme;
+  final HaptPickerController controller;
+
+  @override
+  State<_RotationDial> createState() => _RotationDialState();
+}
+
+class _RotationDialState extends State<_RotationDial> {
+  /// Drag sensitivity: 1.6 px = 1° of rotation. Tuned so a full
+  /// span of the dial (±45° = 90° of rotation) is ~145 px of finger
+  /// travel — comfortable thumb sweep on a phone.
+  static const double _pxPerDegree = 1.6;
+
+  static const double _minDeg = -45;
+  static const double _maxDeg = 45;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    final featured = widget.controller.featuredAsset;
+    final current =
+        featured == null ? 0.0 : widget.controller.cropFor(featured).rotationFine;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: t.spacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Numeric readout — Apple shows "0°" centered; we match.
+          Center(
+            child: Text(
+              '${current >= 0 ? '+' : ''}${current.toStringAsFixed(1)}°',
+              style: t.typography.label.copyWith(
+                color: current.abs() < 0.5
+                    ? t.colors.textSecondary
+                    : t.colors.primary,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          SizedBox(height: t.spacing.xs),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (d) {
+              final delta = d.delta.dx / _pxPerDegree;
+              // We invert because dragging LEFT should INCREASE the
+              // angle clockwise (image rotates right when ticks
+              // scroll left — same direction as the user's wrist).
+              final next = (current - delta).clamp(_minDeg, _maxDeg);
+              widget.controller.setRotationFineForFeatured(next);
+            },
+            child: SizedBox(
+              height: 36,
+              child: CustomPaint(
+                painter: _DialTickPainter(
+                  degrees: current,
+                  tickColor: t.colors.textSecondary.withValues(alpha: 0.4),
+                  majorTickColor: t.colors.textPrimary.withValues(alpha: 0.65),
+                  indicatorColor: t.colors.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Paints the horizontal tick rail + the centre indicator. Ticks
+/// every 1° (minor) and every 5° (major, taller + slightly bolder).
+/// The rail "moves" relative to the indicator: at +10° rotation,
+/// the 10° tick sits under the indicator.
+class _DialTickPainter extends CustomPainter {
+  _DialTickPainter({
+    required this.degrees,
+    required this.tickColor,
+    required this.majorTickColor,
+    required this.indicatorColor,
+  });
+
+  final double degrees;
+  final Color tickColor;
+  final Color majorTickColor;
+  final Color indicatorColor;
+
+  static const double _pxPerDegree = 4.0; // visual rail density
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centreX = size.width / 2;
+    final centreY = size.height / 2;
+    // Visible range: how many degrees fit on screen. Each side =
+    // (width/2) / pxPerDegree. We only paint visible ticks.
+    final visiblePerSide = (size.width / 2 / _pxPerDegree).ceil();
+    final minorPaint = Paint()
+      ..color = tickColor
+      ..strokeWidth = 1;
+    final majorPaint = Paint()
+      ..color = majorTickColor
+      ..strokeWidth = 1.5;
+    for (var deg = -visiblePerSide; deg <= visiblePerSide; deg++) {
+      // Anchor each tick at its "rotation value" then offset by the
+      // current degrees so the rail slides left when degrees goes up.
+      final tickDeg = deg.toDouble();
+      final offset = (tickDeg - degrees) * _pxPerDegree;
+      final x = centreX + offset;
+      if (x < -2 || x > size.width + 2) continue;
+      final isMajor = deg % 5 == 0;
+      final h = isMajor ? 16.0 : 8.0;
+      canvas.drawLine(
+        Offset(x, centreY - h / 2),
+        Offset(x, centreY + h / 2),
+        isMajor ? majorPaint : minorPaint,
+      );
+    }
+    // Centre indicator — vertical brand-coloured bar.
+    final indicator = Paint()
+      ..color = indicatorColor
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(centreX, centreY - 14),
+      Offset(centreX, centreY + 14),
+      indicator,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DialTickPainter old) =>
+      old.degrees != degrees ||
+      old.indicatorColor != indicatorColor;
 }
 
 /// Square outlined button used inside the Crop tab's action row.
