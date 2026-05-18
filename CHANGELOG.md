@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.1 — 2026-05-18
+
+Docs + maintainer-experience release. No code changes; everything
+that runs in your app is identical to 0.8.0.
+
+### Changed
+
+- **README install section** now leads with the pub.dev path
+  (`flutter pub add hapt_photo_picker`). The git-ref install is
+  kept as a documented alternative for users who want `main`
+  between releases or are verifying a fix before it ships.
+- **README roadmap** refreshed — previously claimed v0.1 surface
+  area as the shipping state, now lists everything through v0.8
+  (drill-in editor, fine-rotation dial, manual adjustments,
+  filter presets + intensity, single-pick auto-select, grid
+  perf, etc.).
+- **Screenshots** added to the package surface (`doc/screenshots/`)
+  so pub.dev's package preview shows the picker in action.
+- **Pub + license badges** added at the top of the README.
+
+### Added (maintainer)
+
+- Private `Makefile` (gitignored) with `bump-{patch,minor,major}`,
+  `release-{patch,minor,major}` (bump + commit + tag + push),
+  `tag`, `publish-dry`, and `publish` targets. One-command
+  release flow.
+
 ## 0.8.0 — 2026-05-18
 
 Photo-editor-style drill-in architecture. The editor was outgrowing

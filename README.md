@@ -7,22 +7,15 @@ An Instagram-grade photo picker for Flutter with **full token theming**,
 **multi-language strings**, **choreographed haptics**, and a
 **pluggable post-processing pipeline**.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│   Cancel        ▾ All Photos             Done (3)            │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│                     [ crop preview ]                         │
-│                                                              │
-│  [Original] [1:1] [4:5] [16:9]                               │
-├──────────────────────────────────────────────────────────────┤
-│  ┌──┐┌──┐┌──┐┌──┐                                            │
-│  │ 1││  ││ 2││  │   ← grid w/ live selection badges          │
-│  ├──┤├──┤├──┤├──┤                                            │
-│  │  ││ 3││  ││  │                                            │
-│  └──┘└──┘└──┘└──┘                                            │
-└──────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="doc/screenshots/gallery.png" alt="Gallery + crop preview" width="22%" />
+  <img src="doc/screenshots/crop.png" alt="Crop tool" width="22%" />
+  <img src="doc/screenshots/filter.png" alt="Filter tool" width="22%" />
+  <img src="doc/screenshots/rotate.png" alt="Rotate tool with fine-rotation dial" width="22%" />
+</p>
+<p align="center">
+  <em>Gallery · Crop · Filter · Rotate (Adjust + more in <a href="doc/screenshots/">doc/screenshots/</a>)</em>
+</p>
 
 ## Install
 
