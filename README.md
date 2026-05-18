@@ -42,7 +42,7 @@ dependencies:
   hapt_photo_picker:
     git:
       url: https://github.com/HaptForge/HaptPhotoPicker.git
-      ref: main          # or a specific tag like `v0.8.0`
+      ref: main # or a specific tag like `v0.8.0`
 ```
 
 Then in either case:
@@ -96,13 +96,13 @@ final myTheme = HaptPickerTheme.light().copyWith(
 
 Token bundles you can override independently:
 
-| Bundle | Slots |
-|---|---|
-| `HaptPickerColors` | surface, primary, selectionBadge, cropFrame, … (17 slots) |
-| `HaptPickerTypography` | title, body, label, button, badge |
-| `HaptPickerSpacing` | xxs / xs / sm / md / lg / xl + gridGutter |
-| `HaptPickerRadii` | thumbnail, cropFrame, button, sheet, badge |
-| `HaptPickerShadows` | sheet, button, badge — lists of `BoxShadow` |
+| Bundle                 | Slots                                                     |
+| ---------------------- | --------------------------------------------------------- |
+| `HaptPickerColors`     | surface, primary, selectionBadge, cropFrame, … (17 slots) |
+| `HaptPickerTypography` | title, body, label, button, badge                         |
+| `HaptPickerSpacing`    | xxs / xs / sm / md / lg / xl + gridGutter                 |
+| `HaptPickerRadii`      | thumbnail, cropFrame, button, sheet, badge                |
+| `HaptPickerShadows`    | sheet, button, badge — lists of `BoxShadow`               |
 
 ### Strings — full multi-language
 
@@ -197,6 +197,7 @@ Add the permission usage descriptions to your platform manifests —
 the picker delegates to `photo_manager`, which gates on these.
 
 **iOS** (`ios/Runner/Info.plist`):
+
 ```xml
 <key>NSPhotoLibraryUsageDescription</key>
 <string>Pick photos to share / save / attach in this app.</string>
@@ -205,6 +206,7 @@ the picker delegates to `photo_manager`, which gates on these.
 ```
 
 **Android** (`android/app/src/main/AndroidManifest.xml`):
+
 ```xml
 <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
 <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
