@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.8.2 — 2026-05-18
+
+The Crop tool used to vanish from the launcher row out of the box.
+This release wires the default config to actually surface it, and
+ships a much wider canonical aspect-ratio set.
+
+### Fixed
+
+- **Crop tool now appears by default.** Previous default
+  `aspectRatios: const [HaptAspectRatio.original]` had length 1,
+  which collapsed `aspectAvailable` to false in
+  `EditorToolLauncher` and `EditorToolView` — so tapping any tool
+  besides Filter/Rotate/Adjust had no entry point. Default now
+  ships `HaptAspectRatio.defaultSet` (14 ratios) so the Crop chip
+  surfaces immediately. Consumers passing a custom `aspectRatios`
+  list keep their override.
+
+### Added
+
+- **10 new built-in aspect ratios** alongside the existing four
+  (`original`, `square`, `portrait` = 4:5, `landscape` = 16:9):
+  - `r4x3`, `r3x4` — classic photo-print 4:3 / 3:4
+  - `r3x2`, `r2x3` — DSLR sensor 3:2 / 2:3
+  - `r5x4` — large-format / IG wide portrait
+  - `r9x16` — Instagram Story / Reels vertical
+  - `r2x1`, `r1x2` — panorama / tall
+  - `r3x1`, `r1x3` — banner / poster
+
+  All ship with inline string labels (`"4:3"`, `"9:16"`, …) so
+  consumers don't need to subclass `HaptPickerStrings` to localise
+  the new chips. Subclassing still works the same for the four
+  legacy ratios.
+- **`HaptAspectRatio.defaultSet`** — the canonical 14-ratio list
+  used as the default. Importable for consumers who want to start
+  from the defaults and add custom entries.
+
+### Changed
+
+- **"Original" → "Auto" label** in the EN default strings. "Auto"
+  reads as "free-form, no crop" rather than restating the source
+  resolution — better discoverability of the no-crop mode. Custom
+  `HaptPickerStrings` subclasses override unchanged.
+
 ## 0.8.1 — 2026-05-18
 
 Docs + maintainer-experience release. No code changes; everything

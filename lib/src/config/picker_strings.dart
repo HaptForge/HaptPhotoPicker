@@ -154,7 +154,11 @@ class HaptPickerStringsEn extends HaptPickerStrings {
   @override
   String get permissionDeniedSettings => 'Open Settings';
   @override
-  String get aspectRatioOriginal => 'Original';
+  // "Auto" reads more inviting than "Original" — it tells the user
+  // the chip is the free-form / no-crop mode rather than just
+  // restating the source resolution. Same value in every locale
+  // unless the consumer subclasses to localise.
+  String get aspectRatioOriginal => 'Auto';
   @override
   String get aspectRatioSquare => '1:1';
   @override

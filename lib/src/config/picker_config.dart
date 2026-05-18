@@ -11,7 +11,7 @@ class HaptPickerConfig {
     this.maxSelection = 1,
     this.minSelection = 0,
     this.mediaType = HaptMediaType.image,
-    this.aspectRatios = const [HaptAspectRatio.original],
+    this.aspectRatios = HaptAspectRatio.defaultSet,
     this.initialAspectRatio,
     this.filters = HaptFilter.defaults,
     this.gridColumns = 4,
@@ -113,6 +113,13 @@ class HaptAspectRatio {
   /// values; literal for custom ones.
   final String? label;
 
+  // ─── Built-in ratios ─────────────────────────────────────────
+  // All built-ins are `const` so consumers can pin them into a
+  // `const HaptPickerConfig(...)` invocation. New canonical ratios
+  // ship inline labels (e.g. "4:3"); the four legacy values
+  // (`original`, `square`, `portrait`, `landscape`) keep their
+  // label as `null` so they resolve via [HaptPickerStrings] for
+  // backward compatibility with consumers who localised them.
   static const HaptAspectRatio original = HaptAspectRatio._(
     id: 'original',
     ratio: null,
@@ -133,6 +140,57 @@ class HaptAspectRatio {
     ratio: 16 / 9,
     label: null,
   );
+
+  // Canonical ratio set — covers every common crop the consumer
+  // photo apps surface (Instagram square, Stories 9:16, classic 4:3
+  // print, cinematic 16:9, panorama 2:1 / 3:1, vertical 1:2 / 1:3,
+  // wallet 2:3 / 3:2).
+  static const HaptAspectRatio r4x3 = HaptAspectRatio._(
+      id: 'r4x3', ratio: 4 / 3, label: '4:3');
+  static const HaptAspectRatio r3x4 = HaptAspectRatio._(
+      id: 'r3x4', ratio: 3 / 4, label: '3:4');
+  static const HaptAspectRatio r3x2 = HaptAspectRatio._(
+      id: 'r3x2', ratio: 3 / 2, label: '3:2');
+  static const HaptAspectRatio r2x3 = HaptAspectRatio._(
+      id: 'r2x3', ratio: 2 / 3, label: '2:3');
+  static const HaptAspectRatio r5x4 = HaptAspectRatio._(
+      id: 'r5x4', ratio: 5 / 4, label: '5:4');
+  static const HaptAspectRatio r9x16 = HaptAspectRatio._(
+      id: 'r9x16', ratio: 9 / 16, label: '9:16');
+  static const HaptAspectRatio r2x1 = HaptAspectRatio._(
+      id: 'r2x1', ratio: 2.0, label: '2:1');
+  static const HaptAspectRatio r1x2 = HaptAspectRatio._(
+      id: 'r1x2', ratio: 0.5, label: '1:2');
+  static const HaptAspectRatio r3x1 = HaptAspectRatio._(
+      id: 'r3x1', ratio: 3.0, label: '3:1');
+  static const HaptAspectRatio r1x3 = HaptAspectRatio._(
+      id: 'r1x3', ratio: 1 / 3, label: '1:3');
+
+  /// Canonical default-shipped set. Used by [HaptPickerConfig]'s
+  /// default `aspectRatios` so out-of-the-box consumers get a rich
+  /// Crop tool instead of a single "Auto" chip (which made the
+  /// whole Crop tool collapse to no-op).
+  ///
+  /// Order matches Apple Photos / Instagram conventions: free-form
+  /// first (Auto), then the popular square + portrait + landscape
+  /// trio, then the wider canonical ratios. Override by passing a
+  /// shorter list if your app only needs a subset.
+  static const List<HaptAspectRatio> defaultSet = <HaptAspectRatio>[
+    original,
+    square,
+    r4x3,
+    r3x4,
+    portrait, // 4:5 — Instagram portrait
+    r5x4,
+    landscape, // 16:9 — cinematic
+    r9x16, // 9:16 — Story
+    r3x2,
+    r2x3,
+    r2x1,
+    r1x2,
+    r3x1,
+    r1x3,
+  ];
 
   /// Custom ratio outside the built-in set.
   /// ```dart
