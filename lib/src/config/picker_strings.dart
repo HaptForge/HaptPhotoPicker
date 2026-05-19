@@ -114,6 +114,20 @@ abstract class HaptPickerStrings {
   /// their identity values.
   String get editorAdjustReset;
 
+  /// Pill that fades in over the crop preview while the user is
+  /// press-and-holding to compare the edited image with the
+  /// original. Apple Photos uses "Original".
+  String get compareOriginalLabel;
+
+  /// Tool-chrome Revert button — shown in tool mode next to Done.
+  /// Tapping clears every edit for the active asset (rotation,
+  /// flips, filter, intensity, adjustments). Sheets a confirm
+  /// dialog when there's something to revert.
+  String get editorRevert;
+
+  /// Body of the Revert confirmation dialog.
+  String get editorRevertConfirm;
+
   /// "Selected N of M" — read out by screen readers when the user
   /// taps a thumbnail.
   String selectionAnnouncement(int n, int max);
@@ -201,6 +215,13 @@ class HaptPickerStringsEn extends HaptPickerStrings {
   String get editorAdjustExposure => 'Exposure';
   @override
   String get editorAdjustReset => 'Reset';
+  @override
+  String get compareOriginalLabel => 'Original';
+  @override
+  String get editorRevert => 'Revert';
+  @override
+  String get editorRevertConfirm =>
+      'Revert all edits on this photo?';
   @override
   String selectionAnnouncement(int n, int max) =>
       'Selected $n of $max';

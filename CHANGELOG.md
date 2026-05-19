@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.9.0 — 2026-05-19
+
+Closes the largest remaining Apple Photos parity gap: **compare on
+hold** (the killer A/B gesture every consumer photo editor ships).
+Plus a Revert affordance and Adjust-slider polish that makes the
+panel feel right-clicked.
+
+### Added
+
+- **Compare original on press-and-hold.** Press anywhere on the
+  crop preview and hold → the canvas re-renders with every edit
+  stripped (filter, intensity, adjustments, flips, fine rotation
+  cleared back to identity). Release → edits snap back. Pan/zoom
+  framing is preserved during compare since that's framing, not
+  editing. A small "Original" pill fades in over the top-left
+  corner so the user remembers WHY the image suddenly looks raw.
+  Haptic burst on engage. New string slot
+  `compareOriginalLabel` (default "Original") for the pill text.
+- **Revert button** in tool-mode chrome, next to the back arrow.
+  Renders only when the featured asset has edits (so users don't
+  tap a no-op). Confirm dialog before discarding. Clears every
+  field in `HaptCropState` for the featured asset, including pan
+  / zoom transform. Wired by new
+  `HaptPickerController.revertFeatured()` + `featuredHasEdits`
+  getter. New string slots `editorRevert` (default "Revert") and
+  `editorRevertConfirm` ("Revert all edits on this photo?").
+- **Adjust-slider snap-to-centre dead band.** Sliders with a
+  `centerValue` (brightness / contrast / saturation / exposure
+  all centred at the identity value) now snap to that value when
+  the user drags within 4% of it — same idiom as the rotation
+  dial's 0.5° dead band. Pairs with a `snap` haptic so returning
+  to identity is a deliberate feeling, not a fight against
+  pixel-precision dragging.
+- **Active-slider readout glow.** The numeric readout next to
+  each Adjust slider grows + recolours to the primary tint while
+  the user is actively dragging — matches Apple's emphasis on
+  the active value. Drag end fades it back to muted secondary.
+  Tabular-figures font feature locks the digit width so the
+  readout doesn't jitter as values change.
+- **Signed readout** ("+0.30" / "−0.15") for sliders centred at
+  zero (exposure). Apple uses the same; reads as a relative
+  delta from identity instead of squinting at unsigned floats.
+
+### Changed
+
+- Adjust sliders now use Slider's `onChangeStart` / `onChangeEnd`
+  callbacks to track drag state instead of inferring from value
+  changes. Cleaner, no false positives from external state
+  resets (Revert button, asset switches).
+
 ## 0.8.2 — 2026-05-18
 
 The Crop tool used to vanish from the launcher row out of the box.

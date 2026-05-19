@@ -285,6 +285,36 @@ class HaptPickerController extends ChangeNotifier {
   /// degree boundaries — same idiom Apple's photo editor uses to
   /// give the dial physical feedback without spamming the motor on
   /// every sub-degree touch update.
+  /// True when the featured asset has ANY edit applied — filter,
+  /// adjustments, rotation, flips, or pan/zoom transform. The
+  /// Revert button uses this to decide whether to render at all.
+  bool get featuredHasEdits {
+    final a = featuredAsset;
+    if (a == null) return false;
+    final s = cropFor(a);
+    return s.rotationQuarters != 0 ||
+        s.rotationFine != 0 ||
+        s.flipH ||
+        s.flipV ||
+        !s.filter.isIdentity ||
+        s.filterIntensity != 1.0 ||
+        !s.adjustments.isIdentity ||
+        s.scale != 1.0 ||
+        s.translation != Offset.zero;
+  }
+
+  /// Clear every edit on the featured asset back to identity.
+  /// Bound to the tool-chrome Revert button. Pan / zoom transform
+  /// is reset too — the consumer expects "Revert" to mean
+  /// "completely undo everything I did", not "keep some of it".
+  void revertFeatured() {
+    final a = featuredAsset;
+    if (a == null) return;
+    _cropStates[a.id] = const HaptCropState.identity();
+    haptics.fire(HaptHapticEvent.confirm);
+    notifyListeners();
+  }
+
   void setRotationFineForFeatured(double degrees) {
     final a = featuredAsset;
     if (a == null) return;

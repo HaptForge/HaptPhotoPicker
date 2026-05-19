@@ -257,6 +257,42 @@ class _ListenableScaffoldState extends State<_ListenableScaffold> {
   void _enterTool(EditorTool t) => setState(() => _activeTool = t);
   void _exitTool() => setState(() => _activeTool = null);
 
+  Future<void> _confirmRevert() async {
+    final s = widget.strings;
+    final t = widget.theme;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.colors.surface,
+        content: Text(
+          s.editorRevertConfirm,
+          style: t.typography.body.copyWith(color: t.colors.textPrimary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              s.cancelLabel,
+              style: TextStyle(color: t.colors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              s.editorRevert,
+              style: TextStyle(
+                color: t.colors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    widget.controller.revertFeatured();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -321,8 +357,14 @@ class _ListenableScaffoldState extends State<_ListenableScaffold> {
           theme: t,
           title: _toolTitle(tool),
           doneLabel: widget.strings.doneLabelEmpty,
+          revertLabel: widget.strings.editorRevert,
+          // Revert lives in the chrome's left slot WHEN there's
+          // something to revert. Otherwise back-arrow on its own
+          // (so users don't see a no-op button).
+          showRevert: widget.controller.featuredHasEdits,
           onBack: _exitTool,
           onDone: _exitTool,
+          onRevert: () => _confirmRevert(),
         ),
         // Bigger preview — no asset grid below, so we let it
         // breathe. 0.55 fits comfortably above the controls on a
@@ -374,15 +416,24 @@ class _ToolChrome extends StatelessWidget {
     required this.theme,
     required this.title,
     required this.doneLabel,
+    required this.revertLabel,
+    required this.showRevert,
     required this.onBack,
     required this.onDone,
+    required this.onRevert,
   });
 
   final HaptPickerTheme theme;
   final String title;
   final String doneLabel;
+  final String revertLabel;
+  /// When true, an inline "Revert" link renders next to the back
+  /// arrow. Hidden when the featured asset has no edits to revert
+  /// (so users don't tap a no-op).
+  final bool showRevert;
   final VoidCallback onBack;
   final VoidCallback onDone;
+  final VoidCallback onRevert;
 
   @override
   Widget build(BuildContext context) {
@@ -407,22 +458,51 @@ class _ToolChrome extends StatelessWidget {
             width: sideSlot,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(t.radii.button),
-                  onTap: onBack,
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                        horizontal: t.spacing.xs,
-                        vertical: t.spacing.xs),
-                    child: Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: 18,
-                      color: t.colors.textPrimary,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius:
+                          BorderRadius.circular(t.radii.button),
+                      onTap: onBack,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: t.spacing.xs,
+                            vertical: t.spacing.xs),
+                        child: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 18,
+                          color: t.colors.textPrimary,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (showRevert) ...[
+                    SizedBox(width: t.spacing.xxs),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius:
+                            BorderRadius.circular(t.radii.button),
+                        onTap: onRevert,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: t.spacing.xs,
+                              vertical: t.spacing.xs),
+                          child: Text(
+                            revertLabel,
+                            style: t.typography.label.copyWith(
+                              color: t.colors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

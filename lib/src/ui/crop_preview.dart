@@ -9,6 +9,7 @@ import '../config/picker_strings.dart';
 import '../config/picker_theme.dart';
 import '../controller/picker_controller.dart';
 import '../data/asset.dart';
+import '../util/haptics.dart';
 
 /// The big preview at the top of the picker. v0.2 introduces a fully
 /// interactive crop:
@@ -80,6 +81,13 @@ class _CropPreviewState extends State<CropPreview> {
   String? _wiredAssetId;
   _EditorTool _tool = _EditorTool.crop;
 
+  /// When `true`, the canvas renders the asset with edits stripped —
+  /// no filter / adjustment / flip / fine-rotation. The user enters
+  /// this state by pressing-and-holding the preview (Apple Photos'
+  /// "compare" gesture) and exits on release. Pan/zoom stay applied
+  /// during compare since they're framing, not editing.
+  bool _comparing = false;
+
   @override
   void initState() {
     super.initState();
@@ -150,14 +158,21 @@ class _CropPreviewState extends State<CropPreview> {
     // Build the composed filter live so the preview shows preset +
     // intensity + adjustments combined. Keeps the on-screen image
     // in lockstep with what the engine will export on Done.
+    //
+    // During compare-on-hold (`_comparing == true`), force the
+    // identity filter + identity adjustments so the user sees the
+    // raw asset. Rotation / flip get the same treatment in the
+    // _CropCanvas args below.
     final state = featured == null
         ? const HaptCropState.identity()
         : widget.controller.cropFor(featured);
-    final effectiveFilter = HaptFilter.compose(
-      preset: state.filter,
-      intensity: state.filterIntensity,
-      adjustments: state.adjustments,
-    );
+    final effectiveFilter = _comparing
+        ? HaptFilter.original
+        : HaptFilter.compose(
+            preset: state.filter,
+            intensity: state.filterIntensity,
+            adjustments: state.adjustments,
+          );
     final filters = widget.controller.config.filters;
 
     return Column(
@@ -182,20 +197,79 @@ class _CropPreviewState extends State<CropPreview> {
                       Size(constraints.maxWidth, constraints.maxHeight),
                     );
                   });
-                  return _CropCanvas(
-                    theme: t,
-                    asset: featured,
-                    rotationQuarters: state.rotationQuarters,
-                    rotationFine: state.rotationFine,
-                    flipH: state.flipH,
-                    flipV: state.flipV,
-                    filter: effectiveFilter,
-                    transformController: _transform,
-                    interacting: _interacting,
-                    onInteractionStart: () =>
-                        setState(() => _interacting = true),
-                    onInteractionEnd: () =>
-                        setState(() => _interacting = false),
+                  return GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onLongPressStart: (_) {
+                      // Haptic burst so the user feels the "compare"
+                      // state engage — same as Apple Photos.
+                      widget.controller.haptics
+                          .fire(HaptHapticEvent.snap);
+                      setState(() => _comparing = true);
+                    },
+                    onLongPressEnd: (_) {
+                      if (!_comparing) return;
+                      setState(() => _comparing = false);
+                    },
+                    onLongPressCancel: () {
+                      if (!_comparing) return;
+                      setState(() => _comparing = false);
+                    },
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _CropCanvas(
+                          theme: t,
+                          asset: featured,
+                          rotationQuarters:
+                              _comparing ? 0 : state.rotationQuarters,
+                          rotationFine:
+                              _comparing ? 0 : state.rotationFine,
+                          flipH: _comparing ? false : state.flipH,
+                          flipV: _comparing ? false : state.flipV,
+                          filter: effectiveFilter,
+                          transformController: _transform,
+                          interacting: _interacting,
+                          onInteractionStart: () =>
+                              setState(() => _interacting = true),
+                          onInteractionEnd: () =>
+                              setState(() => _interacting = false),
+                        ),
+                        // "Original" pill in the top-left while
+                        // compare is active — Apple shows the same
+                        // affordance so the user remembers WHY the
+                        // image suddenly looks raw.
+                        Positioned(
+                          top: t.spacing.sm,
+                          left: t.spacing.sm,
+                          child: AnimatedOpacity(
+                            opacity: _comparing ? 1 : 0,
+                            duration:
+                                const Duration(milliseconds: 120),
+                            child: IgnorePointer(
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: t.spacing.sm,
+                                  vertical: t.spacing.xxs,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black
+                                      .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(
+                                      t.radii.button),
+                                ),
+                                child: Text(
+                                  widget.strings.compareOriginalLabel,
+                                  style: t.typography.label.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -975,6 +1049,7 @@ class _AdjustToolPanel extends StatelessWidget {
             min: 0.5,
             max: 1.5,
             centerValue: 1.0,
+            haptics: controller.haptics,
             onChanged: (v) => _set(brightness: v),
           ),
           _LabeledSlider(
@@ -984,6 +1059,7 @@ class _AdjustToolPanel extends StatelessWidget {
             min: 0.5,
             max: 1.8,
             centerValue: 1.0,
+            haptics: controller.haptics,
             onChanged: (v) => _set(contrast: v),
           ),
           _LabeledSlider(
@@ -993,6 +1069,7 @@ class _AdjustToolPanel extends StatelessWidget {
             min: 0.0,
             max: 2.0,
             centerValue: 1.0,
+            haptics: controller.haptics,
             onChanged: (v) => _set(saturation: v),
           ),
           _LabeledSlider(
@@ -1002,6 +1079,7 @@ class _AdjustToolPanel extends StatelessWidget {
             min: -1.0,
             max: 1.0,
             centerValue: 0.0,
+            haptics: controller.haptics,
             onChanged: (v) => _set(exposure: v),
           ),
           if (!adjustments.isIdentity) ...[
@@ -1041,7 +1119,7 @@ class _AdjustToolPanel extends StatelessWidget {
 /// exposure) tapping the label snaps the value back to it.
 /// `displayPercent` formats the readout as 0–100% instead of a
 /// raw decimal (used for filter intensity).
-class _LabeledSlider extends StatelessWidget {
+class _LabeledSlider extends StatefulWidget {
   const _LabeledSlider({
     required this.theme,
     required this.label,
@@ -1051,6 +1129,7 @@ class _LabeledSlider extends StatelessWidget {
     required this.onChanged,
     this.centerValue,
     this.displayPercent = false,
+    this.haptics,
   });
 
   final HaptPickerTheme theme;
@@ -1058,16 +1137,73 @@ class _LabeledSlider extends StatelessWidget {
   final double value;
   final double min;
   final double max;
+
+  /// When set, the slider snaps to this value if the user drags
+  /// within a small dead-band around it. Acts like the centre
+  /// detent on Apple's adjust sliders. Tapping the label also
+  /// snaps to this value. Pass `null` for sliders that don't have
+  /// a meaningful "no-op" centre (e.g. filter intensity 0..1).
   final double? centerValue;
+
   final bool displayPercent;
   final ValueChanged<double> onChanged;
 
+  /// Used to fire a `snap` haptic the moment the slider snaps onto
+  /// the centre detent. Optional — pass `null` to disable the
+  /// per-snap haptic.
+  final HaptHaptics? haptics;
+
+  @override
+  State<_LabeledSlider> createState() => _LabeledSliderState();
+}
+
+class _LabeledSliderState extends State<_LabeledSlider> {
+  bool _dragging = false;
+  bool _wasOnCentre = false;
+
+  /// Dead-band as a fraction of the slider's total range. 4% feels
+  /// right on a 200 px slider — narrow enough to land precise edits,
+  /// wide enough that returning to centre by feel works.
+  static const double _centreDeadBandFraction = 0.04;
+
+  void _handleChanged(double next) {
+    final centre = widget.centerValue;
+    if (centre != null) {
+      final span = widget.max - widget.min;
+      final deadBand = span * _centreDeadBandFraction;
+      if ((next - centre).abs() < deadBand) {
+        next = centre;
+      }
+    }
+    final onCentre = centre != null && next == centre;
+    if (onCentre && !_wasOnCentre) {
+      widget.haptics?.fire(HaptHapticEvent.snap);
+    }
+    _wasOnCentre = onCentre;
+    widget.onChanged(next);
+  }
+
+  String _formatReadout() {
+    if (widget.displayPercent) {
+      return '${(widget.value.clamp(0.0, 1.0) * 100).round()}%';
+    }
+    // Adjust sliders centred at 0 read better with explicit signs
+    // (+0.30 / -0.15) — matches Apple's adjust panel and avoids the
+    // "is that −0.05 or 0.05?" squint.
+    final v = widget.value;
+    if (widget.centerValue != null && widget.centerValue == 0.0) {
+      if (v == 0.0) return '0';
+      return v > 0
+          ? '+${v.toStringAsFixed(2)}'
+          : v.toStringAsFixed(2);
+    }
+    return v.toStringAsFixed(2);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final t = theme;
-    final readout = displayPercent
-        ? '${(value.clamp(0.0, 1.0) * 100).round()}%'
-        : value.toStringAsFixed(2);
+    final t = widget.theme;
+    final centre = widget.centerValue;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1075,11 +1211,11 @@ class _LabeledSlider extends StatelessWidget {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: centerValue == null
+                onTap: centre == null
                     ? null
-                    : () => onChanged(centerValue!),
+                    : () => _handleChanged(centre),
                 child: Text(
-                  label,
+                  widget.label,
                   style: t.typography.label.copyWith(
                     color: t.colors.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -1087,20 +1223,29 @@ class _LabeledSlider extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              readout,
+            // Active value glows in primary while the user is
+            // dragging — mirrors Apple's adjust panel where the
+            // active slider's readout pops to draw the eye.
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 120),
               style: t.typography.label.copyWith(
-                color: t.colors.textSecondary,
-                fontSize: 11,
+                color: _dragging
+                    ? t.colors.primary
+                    : t.colors.textSecondary,
+                fontSize: _dragging ? 13 : 11,
+                fontWeight:
+                    _dragging ? FontWeight.w700 : FontWeight.w400,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
+              child: Text(_formatReadout()),
             ),
           ],
         ),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(
-                enabledThumbRadius: 8),
+            thumbShape: RoundSliderThumbShape(
+                enabledThumbRadius: _dragging ? 10 : 8),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
             activeTrackColor: t.colors.primary,
             inactiveTrackColor:
@@ -1110,10 +1255,12 @@ class _LabeledSlider extends StatelessWidget {
                 t.colors.primary.withValues(alpha: 0.16),
           ),
           child: Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            onChanged: onChanged,
+            value: widget.value.clamp(widget.min, widget.max),
+            min: widget.min,
+            max: widget.max,
+            onChangeStart: (_) => setState(() => _dragging = true),
+            onChangeEnd: (_) => setState(() => _dragging = false),
+            onChanged: _handleChanged,
           ),
         ),
       ],
